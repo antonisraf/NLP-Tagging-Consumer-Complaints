@@ -7,3 +7,6 @@ ENV/
 # Python bytecode
 __pycache__/
 *.pyc
+*.pyo
+
+data/embeddings.npy
