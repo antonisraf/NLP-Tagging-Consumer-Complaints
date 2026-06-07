@@ -10,3 +10,6 @@ __pycache__/
 *.pyo
 
 data/embeddings.npy
+data/tfidf_vectors.npz
+data/tfidf_vectorizer.pkl
+data/student_loan_augmented.csv
