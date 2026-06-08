@@ -88,11 +88,8 @@ X_test = tfidf.transform(test_df['cleaned_text'])
 print(f"\nTF-IDF shape — Train: {X_train.shape} | Test: {X_test.shape}")
 
 # Save the artifacts for later use
-save_npz('data/tfidf_vectors.npz', X_train)
+save_npz('data/X_train_tfidf.npz', X_train)
+save_npz('data/X_test_tfidf.npz', X_test)
 joblib.dump(tfidf, 'data/tfidf_vectorizer.pkl')
 train_df.to_csv('data/student_loan_augmented.csv', index=False)
-
-print("\nSaved:")
-print("  data/tfidf_vectors.npz")
-print("  data/tfidf_vectorizer.pkl")
-print("  data/student_loan_augmented.csv")
+test_df.to_csv('data/student_loan_test.csv', index=False)

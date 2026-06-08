@@ -67,7 +67,7 @@ def clean_tfidf_text(text):
     text = re.sub(r'\d+', '', text)
     text = re.sub(r'[^\w\s]', '', text)
     tokens = text.split()
-    tokens = [lemmatizer.lemmatize(t) for t in tokens if t not in stop_words]
+    tokens = [lemmatizer.lemmatize(t,pos='v') for t in tokens if t not in stop_words]
     return ' '.join(tokens)
 
 

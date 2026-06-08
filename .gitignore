@@ -13,3 +13,6 @@ data/embeddings.npy
 data/tfidf_vectors.npz
 data/tfidf_vectorizer.pkl
 data/student_loan_augmented.csv
+data/X_test_tfidf.npz
+data/X_train_tfidf.npz
+data/student_loan_test.csv
