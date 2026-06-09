@@ -16,3 +16,7 @@ data/student_loan_augmented.csv
 data/X_test_tfidf.npz
 data/X_train_tfidf.npz
 data/student_loan_test.csv
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
