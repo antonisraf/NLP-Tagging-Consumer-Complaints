@@ -239,3 +239,90 @@ def get_valid_subissues():
         'Account information incorrect',
         'Account status incorrect',
     ]
+
+def get_subissue_mapping():
+    """
+    Returns the mapping dictionary for grouping Sub-issue labels into 4 semantic groups.
+
+    Groups:
+        - Payment & Repayment Issues: Payment handling, repayment plans, fee disputes,
+          and flexible repayment options.
+        - Loan Information & Servicing: Incorrect/insufficient information, customer
+          service failures, forgiveness programs, and loan term changes.
+        - Credit Reporting Issues: Credit report errors, unauthorized inquiries,
+          and investigation failures.
+        - Loan Acquisition & Eligibility: Obtaining loans, co-signing, consent
+          violations, and school-related loan issues.
+
+    Note:
+        Sub-issues not present in this mapping are assigned to 'Other'.
+
+    Returns:
+        dict: Mapping from original Sub-issue label to grouped label.
+    """
+    payment     = 'Payment & Repayment Issues'
+    servicing   = 'Loan Information & Servicing'
+    credit      = 'Credit Reporting Issues'
+    acquisition = 'Loan Acquisition & Eligibility'
+
+    return {
+        # Payment & Repayment Issues
+        'Trouble with how payments are being handled':              payment,
+        "Don't agree with the fees charged":                       payment,
+        'Problem with your payment plan':                          payment,
+        "Can't get other flexible options for repaying your loan": payment,
+        "Can't temporarily delay making payments":                 payment,
+        'Problem lowering your monthly payments':                  payment,
+        'Issues with fees connected to the loan':                  payment,
+        'Payment issues':                                          payment,
+        'Billing or statement issues':                             payment,
+        'Billing dispute for services':                            payment,
+
+        # Loan Information & Servicing
+        'Received bad information about your loan':                servicing,
+        'Problem with customer service':                           servicing,
+        'Need information about your loan balance or loan terms':  servicing,
+        'Problem with forgiveness, cancellation, or discharge':    servicing,
+        'Changes in terms mid-deal or after closing':              servicing,
+        'Problem with the interest rate':                          servicing,
+        'Marketing or disclosure issues':                          servicing,
+        'Confusing or misleading advertising':                     servicing,
+        'High pressure sales tactics or recruiting':               servicing,
+        "Didn't receive services that were advertised":            servicing,
+        'Issues with financial aid services':                      servicing,
+        'Problem with product or service terms changing':          servicing,
+        'Problem with signing the paperwork':                      servicing,
+        'Dealing with provider of income share agreement':         servicing,
+
+        # Credit Reporting Issues
+        'Account information incorrect':                           credit,
+        'Account status incorrect':                                credit,
+        'Reporting company used your report improperly':           credit,
+        'Their investigation did not fix an error on your report': credit,
+        'Information belongs to someone else':                     credit,
+        'Old information reappears or never goes away':            credit,
+        'Personal information incorrect':                          credit,
+        "Credit inquiries on your report that you don't recognize": credit,
+        'Was not notified of investigation status or results':     credit,
+        'Investigation took more than 30 days':                    credit,
+        'Information is missing that should be on the report':     credit,
+        'Public record information inaccurate':                    credit,
+        'Other problem getting your report or credit score':       credit,
+        'Problem getting your free annual credit report':          credit,
+        'Problem canceling credit monitoring or identify theft protection service': credit,
+        'Report provided to employer without your written authorization': credit,
+        'Problem with personal statement of dispute':              credit,
+        'Difficulty submitting a dispute or getting information about a dispute over the phone': credit,
+
+        # Loan Acquisition & Eligibility
+        'Co-signer':                                               acquisition,
+        'Denied loan':                                             acquisition,
+        'Loan opened without my consent or knowledge':             acquisition,
+        'Fraudulent loan':                                         acquisition,
+        'Qualified for a better loan than the one offered':        acquisition,
+        'Bankruptcy':                                              acquisition,
+        'Cannot graduate, receive diploma, or get transcript due to money owed': acquisition,
+        'Keep getting calls about your loan':                      acquisition,
+        'Received unwanted marketing or advertising':              acquisition,
+        'Received unsolicited financial product or insurance offers after opting out': acquisition,
+    }
