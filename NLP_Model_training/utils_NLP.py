@@ -1,5 +1,6 @@
 import re
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from deep_translator import GoogleTranslator
@@ -13,37 +14,17 @@ nltk.download('wordnet', quiet=True)
 stop_words = set(stopwords.words('english'))
 lemmatizer = WordNetLemmatizer()
 
-
-def clean_transformer_text(text):
-    """
-    Cleans raw complaint text for use with SentenceTransformer models.
-
-    Steps:
-        - Converts input to string
-        - Removes URLs
-        - Removes redacted placeholders (e.g. XXXX)
-        - Collapses multiple whitespace into a single space
-
-    Args:
-        text (str): Raw complaint narrative text.
-
-    Returns:
-        str: Cleaned text string.
-    """
-    text = str(text)
-    text = re.sub(r'http\S+', '', text)
-    text = re.sub(r'X{2,}', ' ', text)
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
+# Max character limit for back-translation — texts exceeding this are skipped
+# to avoid augmenting incomplete/truncated samples
+BACK_TRANSLATE_MAX_CHARS = 5000
 
 
 def clean_tfidf_text(text):
     """
     Cleans and normalizes raw complaint text specifically for TF-IDF vectorization.
 
-    Applies more aggressive preprocessing than clean_transformer_text, including
-    stopword removal, lemmatization, and punctuation removal. These steps reduce
-    noise and vocabulary size, improving TF-IDF representation quality.
+    Applies aggressive preprocessing including stopword removal, lemmatization,
+    and punctuation removal to reduce noise and vocabulary size.
 
     Steps:
         - Converts input to string and lowercases
@@ -52,7 +33,8 @@ def clean_tfidf_text(text):
         - Removes numbers
         - Removes punctuation
         - Tokenizes and removes English stopwords
-        - Applies WordNet lemmatization
+        - Removes single-character tokens
+        - Applies WordNet lemmatization with noun-first, verb-fallback strategy
         - Collapses multiple whitespace into a single space
 
     Args:
@@ -67,8 +49,15 @@ def clean_tfidf_text(text):
     text = re.sub(r'\d+', '', text)
     text = re.sub(r'[^\w\s]', '', text)
     tokens = text.split()
-    tokens = [lemmatizer.lemmatize(t,pos='v') for t in tokens if t not in stop_words]
-    return ' '.join(tokens)
+    cleaned = []
+    for t in tokens:
+        if len(t) <= 1 or t in stop_words:
+            continue
+        # Lemmatize as noun first; if unchanged, try as verb
+        noun_form = lemmatizer.lemmatize(t, pos='n')
+        lemma = noun_form if noun_form != t else lemmatizer.lemmatize(t, pos='v')
+        cleaned.append(lemma)
+    return ' '.join(cleaned)
 
 
 def back_translate(text, mid_lang='de'):
@@ -78,17 +67,24 @@ def back_translate(text, mid_lang='de'):
     Translates text from English to an intermediate language and back to English.
     Used to generate paraphrased versions of underrepresented complaint narratives.
 
+    Texts exceeding BACK_TRANSLATE_MAX_CHARS are skipped entirely to avoid
+    augmenting incomplete samples caused by truncation.
+
     Args:
         text (str): Original English complaint text.
         mid_lang (str): Intermediate language code (default: 'de' for German).
-                        German is preferred over Greek due to higher translation reliability.
+                        German is preferred due to higher translation reliability.
 
     Returns:
-        str or None: Back-translated English text, or None if translation failed
-                     or if non-ASCII characters are detected in the result.
+        str or None: Back-translated English text, or None if:
+                     - text exceeds character limit
+                     - translation failed
+                     - non-ASCII characters detected in result
     """
     try:
-        text = str(text)[:5000]
+        text = str(text)
+        if len(text) > BACK_TRANSLATE_MAX_CHARS:
+            return None
         translated = GoogleTranslator(source='en', target=mid_lang).translate(text)
         back = GoogleTranslator(source=mid_lang, target='en').translate(translated)
         if any(ord(c) > 127 for c in back):
@@ -103,19 +99,23 @@ def back_translate_dataframe(df, text_column, max_workers=5, sleep=0.05):
     Applies back-translation to all rows of a DataFrame using multithreading.
 
     Uses ThreadPoolExecutor for parallel API calls to speed up augmentation.
-    A small sleep is added between requests to avoid hitting Google Translate rate limits.
+    Rate limiting is enforced via a threading Semaphore, ensuring requests are
+    spaced out across all threads rather than firing simultaneously.
 
     Args:
         df (pd.DataFrame): DataFrame containing the text column to augment.
         text_column (str): Name of the column with complaint narratives.
         max_workers (int): Number of parallel threads (default: 5).
-        sleep (float): Sleep time in seconds between requests (default: 0.05).
+        sleep (float): Minimum sleep time in seconds between requests (default: 0.05).
 
     Returns:
         list: List of augmented row dicts (only successful translations included).
     """
+    semaphore = threading.Semaphore(1)
+
     def augment_row(row):
-        time.sleep(sleep)
+        with semaphore:
+            time.sleep(sleep)
         result = back_translate(row[text_column])
         if result:
             new_row = row.copy()
@@ -164,6 +164,58 @@ def get_issue_mapping():
     }
 
 
+def filter_by_vocab_count(df, text_column, min_unique=5, max_unique=500):
+    """
+    Filters DataFrame rows based on the number of unique tokens in the cleaned text.
+
+    Removes rows with too few unique tokens (likely empty or junk text) and rows
+    with too many unique tokens (likely data dumps or malformed entries). Applied
+    before train/test split to avoid leakage.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the cleaned text column.
+        text_column (str): Name of the column with cleaned complaint text.
+        min_unique (int): Minimum number of unique tokens required (default: 5).
+        max_unique (int): Maximum number of unique tokens allowed (default: 500).
+
+    Returns:
+        tuple:
+            - pd.DataFrame: Filtered DataFrame (reset index).
+            - dict: Stats with keys:
+                'original'      : total rows before filtering
+                'removed_low'   : rows removed for too few unique tokens
+                'removed_high'  : rows removed for too many unique tokens
+                'final'         : rows remaining after filtering
+                'mean_unique'   : mean unique token count in filtered set
+                'median_unique' : median unique token count in filtered set
+                'mean_tokens'   : mean total token count in filtered set
+                'pct_kept'      : percentage of rows retained
+    """
+    original = len(df)
+    unique_counts = df[text_column].apply(lambda x: len(set(str(x).split())))
+    total_counts = df[text_column].apply(lambda x: len(str(x).split()))
+
+    mask_low = unique_counts < min_unique
+    mask_high = unique_counts > max_unique
+    keep_mask = ~mask_low & ~mask_high
+
+    filtered_df = df[keep_mask].reset_index(drop=True)
+    filtered_unique = unique_counts[keep_mask]
+    filtered_total = total_counts[keep_mask]
+
+    stats = {
+        'original':       original,
+        'removed_low':    int(mask_low.sum()),
+        'removed_high':   int(mask_high.sum()),
+        'final':          len(filtered_df),
+        'mean_unique':    round(filtered_unique.mean(), 1),
+        'median_unique':  round(filtered_unique.median(), 1),
+        'mean_tokens':    round(filtered_total.mean(), 1),
+        'pct_kept':       round(len(filtered_df) / original * 100, 2),
+    }
+    return filtered_df, stats
+
+
 def get_valid_subissues():
     """
     Returns the list of Sub-issue labels retained after frequency filtering.
@@ -187,3 +239,90 @@ def get_valid_subissues():
         'Account information incorrect',
         'Account status incorrect',
     ]
+
+def get_subissue_mapping():
+    """
+    Returns the mapping dictionary for grouping Sub-issue labels into 4 semantic groups.
+
+    Groups:
+        - Payment & Repayment Issues: Payment handling, repayment plans, fee disputes,
+          and flexible repayment options.
+        - Loan Information & Servicing: Incorrect/insufficient information, customer
+          service failures, forgiveness programs, and loan term changes.
+        - Credit Reporting Issues: Credit report errors, unauthorized inquiries,
+          and investigation failures.
+        - Loan Acquisition & Eligibility: Obtaining loans, co-signing, consent
+          violations, and school-related loan issues.
+
+    Note:
+        Sub-issues not present in this mapping are assigned to 'Other'.
+
+    Returns:
+        dict: Mapping from original Sub-issue label to grouped label.
+    """
+    payment     = 'Payment & Repayment Issues'
+    servicing   = 'Loan Information & Servicing'
+    credit      = 'Credit Reporting Issues'
+    acquisition = 'Loan Acquisition & Eligibility'
+
+    return {
+        # Payment & Repayment Issues
+        'Trouble with how payments are being handled':              payment,
+        "Don't agree with the fees charged":                       payment,
+        'Problem with your payment plan':                          payment,
+        "Can't get other flexible options for repaying your loan": payment,
+        "Can't temporarily delay making payments":                 payment,
+        'Problem lowering your monthly payments':                  payment,
+        'Issues with fees connected to the loan':                  payment,
+        'Payment issues':                                          payment,
+        'Billing or statement issues':                             payment,
+        'Billing dispute for services':                            payment,
+
+        # Loan Information & Servicing
+        'Received bad information about your loan':                servicing,
+        'Problem with customer service':                           servicing,
+        'Need information about your loan balance or loan terms':  servicing,
+        'Problem with forgiveness, cancellation, or discharge':    servicing,
+        'Changes in terms mid-deal or after closing':              servicing,
+        'Problem with the interest rate':                          servicing,
+        'Marketing or disclosure issues':                          servicing,
+        'Confusing or misleading advertising':                     servicing,
+        'High pressure sales tactics or recruiting':               servicing,
+        "Didn't receive services that were advertised":            servicing,
+        'Issues with financial aid services':                      servicing,
+        'Problem with product or service terms changing':          servicing,
+        'Problem with signing the paperwork':                      servicing,
+        'Dealing with provider of income share agreement':         servicing,
+
+        # Credit Reporting Issues
+        'Account information incorrect':                           credit,
+        'Account status incorrect':                                credit,
+        'Reporting company used your report improperly':           credit,
+        'Their investigation did not fix an error on your report': credit,
+        'Information belongs to someone else':                     credit,
+        'Old information reappears or never goes away':            credit,
+        'Personal information incorrect':                          credit,
+        "Credit inquiries on your report that you don't recognize": credit,
+        'Was not notified of investigation status or results':     credit,
+        'Investigation took more than 30 days':                    credit,
+        'Information is missing that should be on the report':     credit,
+        'Public record information inaccurate':                    credit,
+        'Other problem getting your report or credit score':       credit,
+        'Problem getting your free annual credit report':          credit,
+        'Problem canceling credit monitoring or identify theft protection service': credit,
+        'Report provided to employer without your written authorization': credit,
+        'Problem with personal statement of dispute':              credit,
+        'Difficulty submitting a dispute or getting information about a dispute over the phone': credit,
+
+        # Loan Acquisition & Eligibility
+        'Co-signer':                                               acquisition,
+        'Denied loan':                                             acquisition,
+        'Loan opened without my consent or knowledge':             acquisition,
+        'Fraudulent loan':                                         acquisition,
+        'Qualified for a better loan than the one offered':        acquisition,
+        'Bankruptcy':                                              acquisition,
+        'Cannot graduate, receive diploma, or get transcript due to money owed': acquisition,
+        'Keep getting calls about your loan':                      acquisition,
+        'Received unwanted marketing or advertising':              acquisition,
+        'Received unsolicited financial product or insurance offers after opting out': acquisition,
+    }

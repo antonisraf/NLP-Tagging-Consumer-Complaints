@@ -28,6 +28,10 @@ One of the most important findings of this analysis is that the complaint metada
 
 This finding is significant because it rules out any shortcut. The only way to reliably tag a complaint is to read what the consumer actually wrote. The narrative is not just the best feature available; it is the only one that matters.
 
+## Text Length Filtering
+
+Before exporting the final dataset, a length-based filtering step was applied to the complaint narratives. After removing records with missing text, complaints shorter than the 25th percentile character count were dropped. These very short texts were found to lack sufficient context for reliable classification and would introduce noise into the model. This step is a deliberate quality gate: it trades a small reduction in dataset size for a meaningful improvement in the signal-to-noise ratio of the training data.
+
 ## Conclusion
 
-The analysis confirmed that the dataset is complex, imbalanced, and heavily dependent on free text for meaningful signal. The metadata explored throughout this report was ultimately set aside, but examining it was not wasted effort. It provided context about who is complaining, about whom, and when, and it gave statistical grounding to the decision to rely exclusively on the consumer narrative. The clean dataset exported at the end of this phase contains 25,603 records with the narrative, Issue, and Sub-issue, and is ready for the next stage of the pipeline.
+The analysis confirmed that the dataset is complex, imbalanced, and heavily dependent on free text for meaningful signal. The metadata explored throughout this report was ultimately set aside, but examining it was not wasted effort. It provided context about who is complaining, about whom, and when, and it gave statistical grounding to the decision to rely exclusively on the consumer narrative. The clean dataset exported at the end of this phase contains records with the narrative, Issue, and Sub-issue that have passed both null filtering and the 25th percentile length threshold, and is ready for the next stage of the pipeline.
