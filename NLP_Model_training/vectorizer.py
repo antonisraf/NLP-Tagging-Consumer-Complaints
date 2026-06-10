@@ -9,7 +9,7 @@ from utils_NLP import (
     filter_by_vocab_count,
     back_translate_dataframe,
     get_issue_mapping,
-    get_valid_subissues
+    get_subissue_mapping
 )
 
 # Load the cleaned dataset
@@ -44,12 +44,10 @@ nlp_data = nlp_data.reset_index(drop=True)
 print("\n=== Issue distribution ===")
 print(nlp_data['Issue_grouped'].value_counts())
 
-# Keep only Sub-issues with more than 500 samples, grouping the rest under 'Other'
-valid_subissues = get_valid_subissues()
+# Group Sub-issues into 4 semantic categories using get_subissue_mapping()
+subissue_mapping = get_subissue_mapping()
 nlp_data['Sub-issue'] = nlp_data['Sub-issue'].fillna('Other')
-nlp_data['Subissue_grouped'] = nlp_data['Sub-issue'].apply(
-    lambda x: x if x in valid_subissues else 'Other'
-)
+nlp_data['Subissue_grouped'] = nlp_data['Sub-issue'].map(subissue_mapping).fillna('Other')
 
 print("\n=== Sub-issue distribution ===")
 print(nlp_data['Subissue_grouped'].value_counts())
