@@ -17,7 +17,7 @@ warnings.filterwarnings('ignore')
 from NLP_Model_training.utils_NLP import back_translate_dataframe, clean_tfidf_text
 
 # Rejection threshold for auto-labeling
-REJECTION_THRESHOLD = 0.55
+REJECTION_THRESHOLD = 0.45
 
 # I regroup the original 4 Issue classes into 2 broad groups based on confusion patterns:
 GROUPING_ORIGINAL = {
@@ -112,29 +112,6 @@ def run_pipeline(X_train, X_test, train_df, test_df, tfidf,
         grp_train_df          = train_df[train_mask].copy()
         grp_train_issue_proba = train_issue_proba[train_mask.values]
 
-        # Targeted augmentation
-        target_subissue = 'Loan Acquisition & Eligibility'
-        subissue_counts = grp_train_df['Subissue_grouped'].value_counts()
-        if (target_subissue in subissue_counts.index
-                and subissue_counts[target_subissue] < 400):
-            minority_samples = grp_train_df[grp_train_df['Subissue_grouped'] == target_subissue]
-            if len(minority_samples) > 1:
-                augmented_rows = back_translate_dataframe(
-                    minority_samples,
-                    text_column='Consumer complaint narrative',
-                    max_workers=5
-                )
-                if augmented_rows:
-                    aug_df = pd.DataFrame(augmented_rows)
-                    aug_df['cleaned_text'] = aug_df['Consumer complaint narrative'].apply(clean_tfidf_text)
-                    aug_issue_proba = np.tile(
-                        grp_train_issue_proba.mean(axis=0), (len(aug_df), 1)
-                    )
-                    grp_train_df = pd.concat([grp_train_df, aug_df], ignore_index=True)
-                    grp_train_issue_proba = np.vstack(
-                        [grp_train_issue_proba, aug_issue_proba]
-                    )
-
         X_train_tfidf  = tfidf.transform(grp_train_df['cleaned_text'])
         issue_proba_sp = csr_matrix(grp_train_issue_proba.astype(np.float32))
         X_train_group  = hstack([X_train_tfidf, issue_proba_sp])
@@ -149,8 +126,10 @@ def run_pipeline(X_train, X_test, train_df, test_df, tfidf,
                 final_subissue_confidence[test_mask] = 1.0
             continue
 
-        lr_sub = LogisticRegression(
-            C=1.0, max_iter=1000, class_weight='balanced', random_state=42
+        
+        lr_sub = GridSearchCV(
+            LogisticRegression(max_iter=1000, class_weight='balanced', random_state=42),
+            param_grid={'C': [0.1, 1.0, 5.0]}, cv=cv, scoring='f1_macro', n_jobs=-1
         )
         lr_sub.fit(X_train_group, y_train_subgroup)
 
@@ -158,9 +137,13 @@ def run_pipeline(X_train, X_test, train_df, test_df, tfidf,
         use_svc = min_class_count >= 2
         if use_svc:
             safe_cv = min(3, min_class_count)
-            svc_sub = CalibratedClassifierCV(
-                LinearSVC(C=1.0, max_iter=1000, class_weight='balanced', random_state=42),
-                cv=safe_cv, method='isotonic'
+            
+            svc_sub = GridSearchCV(
+                CalibratedClassifierCV(
+                    LinearSVC(max_iter=1000, class_weight='balanced', random_state=42),
+                    cv=safe_cv, method='isotonic'
+                ),
+                param_grid={'estimator__C': [0.1, 1.0, 5.0]}, cv=cv, scoring='f1_macro', n_jobs=-1
             )
             svc_sub.fit(X_train_group, y_train_subgroup)
 
@@ -171,13 +154,13 @@ def run_pipeline(X_train, X_test, train_df, test_df, tfidf,
 
             if use_svc:
                 avg_sub_proba = (
-                    lr_sub.predict_proba(X_test_group)
-                    + svc_sub.predict_proba(X_test_group)
+                    lr_sub.best_estimator_.predict_proba(X_test_group)
+                    + svc_sub.best_estimator_.predict_proba(X_test_group)
                 ) / 2.0
             else:
-                avg_sub_proba = lr_sub.predict_proba(X_test_group)
+                avg_sub_proba = lr_sub.best_estimator_.predict_proba(X_test_group)
 
-            sub_classes = lr_sub.classes_
+            sub_classes = lr_sub.best_estimator_.classes_
             final_subissue_preds[test_mask]      = sub_classes[np.argmax(avg_sub_proba, axis=1)]
             final_subissue_confidence[test_mask] = avg_sub_proba.max(axis=1)
 
@@ -262,31 +245,6 @@ for issue_group in unique_issues:
     grp_train_df          = train_df[train_mask].copy()
     grp_train_issue_proba = train_issue_proba[train_mask.values]
 
-    target_subissue = 'Loan Acquisition & Eligibility'
-    subissue_counts = grp_train_df['Subissue_grouped'].value_counts()
-    if (target_subissue in subissue_counts.index
-            and subissue_counts[target_subissue] < 400):
-        minority_samples = grp_train_df[grp_train_df['Subissue_grouped'] == target_subissue]
-        if len(minority_samples) > 1:
-            print(f"     [Augment] Back-translating '{target_subissue}' "
-                  f"({len(minority_samples)} samples)...")
-            augmented_rows = back_translate_dataframe(
-                minority_samples,
-                text_column='Consumer complaint narrative',
-                max_workers=5
-            )
-            if augmented_rows:
-                aug_df = pd.DataFrame(augmented_rows)
-                aug_df['cleaned_text'] = aug_df['Consumer complaint narrative'].apply(clean_tfidf_text)
-                aug_issue_proba = np.tile(
-                    grp_train_issue_proba.mean(axis=0), (len(aug_df), 1)
-                )
-                grp_train_df = pd.concat([grp_train_df, aug_df], ignore_index=True)
-                grp_train_issue_proba = np.vstack(
-                    [grp_train_issue_proba, aug_issue_proba]
-                )
-                print(f"     [Augment] Added {len(aug_df)} synthetic samples.")
-
     X_train_tfidf  = tfidf.transform(grp_train_df['cleaned_text'])
     issue_proba_sp = csr_matrix(grp_train_issue_proba.astype(np.float32))
     X_train_group  = hstack([X_train_tfidf, issue_proba_sp])
@@ -306,10 +264,13 @@ for issue_group in unique_issues:
           f"{len(unique_subclasses)} classes | {X_train_group.shape[0]} samples")
     print(f"     [Distribution]\n{y_train_subgroup.value_counts().to_string()}")
 
-    lr_sub = LogisticRegression(
-        C=1.0, max_iter=1000, class_weight='balanced', random_state=42
+    
+    lr_sub = GridSearchCV(
+        LogisticRegression(max_iter=1000, class_weight='balanced', random_state=42),
+        param_grid={'C': [0.1, 1.0, 5.0]}, cv=cv, scoring='f1_macro', n_jobs=-1
     )
     lr_sub.fit(X_train_group, y_train_subgroup)
+    print(f"     [LR]  Best C: {lr_sub.best_params_['C']}  |  CV Macro F1: {lr_sub.best_score_:.4f}")
 
     min_class_count = y_train_subgroup.value_counts().min()
     use_svc = min_class_count >= 2
@@ -317,11 +278,16 @@ for issue_group in unique_issues:
         safe_cv = min(3, min_class_count)
         if safe_cv < 3:
             print(f"     [Calib] min_class_count={min_class_count} — reducing CV to {safe_cv} folds.")
-        svc_sub = CalibratedClassifierCV(
-            LinearSVC(C=1.0, max_iter=1000, class_weight='balanced', random_state=42),
-            cv=safe_cv, method='isotonic'
+      
+        svc_sub = GridSearchCV(
+            CalibratedClassifierCV(
+                LinearSVC(max_iter=1000, class_weight='balanced', random_state=42),
+                cv=safe_cv, method='isotonic'
+            ),
+            param_grid={'estimator__C': [0.1, 1.0, 5.0]}, cv=cv, scoring='f1_macro', n_jobs=-1
         )
         svc_sub.fit(X_train_group, y_train_subgroup)
+        print(f"     [SVC] Best C: {svc_sub.best_params_['estimator__C']}  |  CV Macro F1: {svc_sub.best_score_:.4f}")
     else:
         print(f"     [Calib] min_class_count={min_class_count} — SVC skipped, using LR only.")
 
@@ -332,13 +298,13 @@ for issue_group in unique_issues:
 
         if use_svc:
             avg_sub_proba = (
-                lr_sub.predict_proba(X_test_group)
-                + svc_sub.predict_proba(X_test_group)
+                lr_sub.best_estimator_.predict_proba(X_test_group)
+                + svc_sub.best_estimator_.predict_proba(X_test_group)
             ) / 2.0
         else:
-            avg_sub_proba = lr_sub.predict_proba(X_test_group)
+            avg_sub_proba = lr_sub.best_estimator_.predict_proba(X_test_group)
 
-        sub_classes = lr_sub.classes_
+        sub_classes = lr_sub.best_estimator_.classes_
         final_subissue_preds[test_mask]      = sub_classes[np.argmax(avg_sub_proba, axis=1)]
         final_subissue_confidence[test_mask] = avg_sub_proba.max(axis=1)
 

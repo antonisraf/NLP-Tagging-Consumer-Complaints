@@ -53,6 +53,7 @@ print("\n=== Sub-issue distribution ===")
 print(nlp_data['Subissue_grouped'].value_counts())
 
 # Split into train/test before augmentation and TF-IDF fitting
+# Split into train/test before augmentation and TF-IDF fitting
 train_df, test_df = train_test_split(
     nlp_data,
     test_size=0.2,
@@ -61,6 +62,19 @@ train_df, test_df = train_test_split(
 )
 
 print(f"\nTrain size: {len(train_df)} | Test size: {len(test_df)}")
+
+
+tfidf = TfidfVectorizer(
+    max_features=50000,
+    ngram_range=(1, 2),
+    min_df=3,
+    max_df=0.95,
+    sublinear_tf=True
+)
+
+print("\nFitting TF-IDF vectorizer on original training data...")
+tfidf.fit(train_df['cleaned_text'])
+
 
 # We perform back translation only for the 'Loan Acquisition' group due to its limited sample size (~772 samples)
 # Augmentation is applied only to the training set
@@ -89,17 +103,8 @@ print(f"Successful augmentation: {len(augmented_df)}/{len(loan_acq_train)}")
 train_df = pd.concat([train_df, augmented_df], ignore_index=True)
 print(f"Total train samples after augmentation: {len(train_df)}")
 
-# TF-IDF vectorization: fit only on train set, transform both train and test
-tfidf = TfidfVectorizer(
-    max_features=50000,
-    ngram_range=(1, 2),
-    min_df=3,
-    max_df=0.95,
-    sublinear_tf=True
-)
 
-# Fit the TF-IDF vectorizer on training data only, then transform both sets
-X_train = tfidf.fit_transform(train_df['cleaned_text'])
+X_train = tfidf.transform(train_df['cleaned_text'])
 X_test = tfidf.transform(test_df['cleaned_text'])
 print(f"\nTF-IDF shape — Train: {X_train.shape} | Test: {X_test.shape}")
 

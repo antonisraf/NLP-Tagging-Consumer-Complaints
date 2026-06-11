@@ -1,6 +1,5 @@
 import re
 import time
-import threading
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from deep_translator import GoogleTranslator
@@ -14,7 +13,7 @@ nltk.download('wordnet', quiet=True)
 stop_words = set(stopwords.words('english'))
 lemmatizer = WordNetLemmatizer()
 
-# Max character limit for back-translation — texts exceeding this are skipped
+# Max character limit for back-translation, texts exceeding this are skipped
 # to avoid augmenting incomplete/truncated samples
 BACK_TRANSLATE_MAX_CHARS = 5000
 
@@ -27,7 +26,8 @@ def clean_tfidf_text(text):
     text = re.sub(r'http\S+', '', text)
     text = re.sub(r'X{2,}', '', text)
     text = re.sub(r'\d+', '', text)
-    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'[^a-z\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
     tokens = text.split()
     cleaned = []
     for t in tokens:
@@ -60,11 +60,8 @@ def back_translate_dataframe(df, text_column, max_workers=5, sleep=0.05):
     """
     Applies back-translation to all rows of a DataFrame using multithreading.
     """
-    semaphore = threading.Semaphore(1)
-
     def augment_row(row):
-        with semaphore:
-            time.sleep(sleep)
+        time.sleep(sleep)
         result = back_translate(row[text_column])
         if result:
             new_row = row.copy()
@@ -137,24 +134,6 @@ def filter_by_vocab_count(df, text_column, min_unique=5, max_unique=500):
     }
     return filtered_df, stats
 
-
-def get_valid_subissues():
-    """
-    Returns the list of Sub-issue labels retained after frequency filtering.
-    """
-    return [
-        'Trouble with how payments are being handled',
-        'Received bad information about your loan',
-        'Problem with customer service',
-        'Problem with forgiveness, cancellation, or discharge',
-        "Don't agree with the fees charged",
-        'Need information about your loan balance or loan terms',
-        'Problem with your payment plan',
-        'Reporting company used your report improperly',
-        "Can't get other flexible options for repaying your loan",
-        'Account information incorrect',
-        'Account status incorrect',
-    ]
 
 def get_subissue_mapping():
     """

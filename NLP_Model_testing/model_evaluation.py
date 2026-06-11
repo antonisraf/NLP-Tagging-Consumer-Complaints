@@ -16,7 +16,7 @@ import seaborn as sns
 
 warnings.filterwarnings('ignore')
 
-# Δημιουργία φακέλου για τα plots αν δεν υπάρχει
+# Create plot folder
 os.makedirs('plots', exist_ok=True)
 
 # Set matplotlib style
@@ -47,17 +47,22 @@ y_test_issue_broad  = y_test_subissue.map(GROUPING)
 # Configuring StratifiedKFold for consistent cross-validation splits
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-lr_pipe = GridSearchCV(LogisticRegression(class_weight='balanced', max_iter=1000, random_state=42),
-                       param_grid={'C': [1.0]}, cv=cv, scoring='f1_macro', n_jobs=-1)
-lr_pipe.fit(X_train, y_train_issue_broad)
-# We use CalibratedClassifierCV with LinearSVC to get probability estimates for the SVC model
-svc_pipe = GridSearchCV(CalibratedClassifierCV(LinearSVC(class_weight='balanced', max_iter=1000, random_state=42), cv=3, method='isotonic'),
-                        param_grid={'estimator__C': [1.0]}, cv=cv, scoring='f1_macro', n_jobs=-1)
-svc_pipe.fit(X_train, y_train_issue_broad)
+
+lr_model = LogisticRegression(C=1.0, class_weight='balanced', max_iter=1000, random_state=42)
+lr_model.fit(X_train, y_train_issue_broad)
+
+# 2. Calibrated LinearSVC 
+svc_model = CalibratedClassifierCV(
+    LinearSVC(C=1.0, class_weight='balanced', max_iter=1000, random_state=42), 
+    cv=3, 
+    method='isotonic'
+)
+svc_model.fit(X_train, y_train_issue_broad)
+
 # Level 1 predictions and probabilities for the test set
-proba_lr_test  = lr_pipe.best_estimator_.predict_proba(X_test)
-proba_svc_test = svc_pipe.best_estimator_.predict_proba(X_test)
-broad_classes  = lr_pipe.best_estimator_.classes_
+proba_lr_test  = lr_model.predict_proba(X_test)
+proba_svc_test = svc_model.predict_proba(X_test)
+broad_classes  = lr_model.classes_
 # We average the probabilities from both models to get a more robust confidence score for the broad issue classification
 avg_proba_broad  = (proba_lr_test + proba_svc_test) / 2.0
 y_pred_broad     = broad_classes[np.argmax(avg_proba_broad, axis=1)]
@@ -77,8 +82,8 @@ for broad_group in broad_classes:
     grp_train_df = train_df[train_mask].copy()
     grp_train_broad_proba = train_broad_proba[train_mask.values]
 
-    X_train_tfidf   = tfidf.transform(grp_train_df['cleaned_text'])
-    broad_proba_sp  = csr_matrix(grp_train_broad_proba.astype(np.float32))
+    X_train_tfidf   = X_train[train_mask.values]
+    broad_proba_sp = csr_matrix(grp_train_broad_proba.astype(np.float32))
     X_train_group   = hstack([X_train_tfidf, broad_proba_sp])
     y_train_subgroup  = grp_train_df['Subissue_grouped']
 
@@ -92,7 +97,7 @@ for broad_group in broad_classes:
 
     if test_mask.sum() > 0:
         X_test_tfidf  = X_test[test_mask]
-        test_bp_sp    = csr_matrix(avg_proba_broad[test_mask].astype(np.float32))
+        test_bp_sp = csr_matrix(avg_proba_broad[test_mask].astype(np.float32))
         X_test_group  = hstack([X_test_tfidf, test_bp_sp])
 
         avg_sub_proba = (lr_sub.predict_proba(X_test_group) + svc_sub.predict_proba(X_test_group)) / 2.0
