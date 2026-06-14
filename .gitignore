@@ -3,6 +3,7 @@
 env/
 venv/
 ENV/
+.env
 
 # Python bytecode
 __pycache__/
@@ -16,6 +17,7 @@ data/student_loan_augmented.csv
 data/X_test_tfidf.npz
 data/X_train_tfidf.npz
 data/student_loan_test.csv
+data/hierarchical_model_bundle.pkl
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
