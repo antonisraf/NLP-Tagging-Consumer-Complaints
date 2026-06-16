@@ -146,8 +146,10 @@ def apply_review_decisions(results_df: pd.DataFrame) -> pd.DataFrame:
       - reviewed_subissue  : human label (or model label if auto-classified)
       - review_source      : "human" | "model"
 
-    Accuracy columns (issue_correct / subissue_correct) are recomputed using
-    the reviewed labels so the dashboard reflects the final merged verdict.
+    Rows fixed by a human are accepted as-is — the human takes responsibility
+    for them, so we don't score them against the synthetic ground-truth
+    labels. Only rows still resolved by the model keep their original
+    accuracy verdict.
     """
     df = results_df.copy()
     decisions = st.session_state.get("review_decisions", {})
@@ -170,9 +172,15 @@ def apply_review_decisions(results_df: pd.DataFrame) -> pd.DataFrame:
     df["reviewed_subissue"] = reviewed_subissue
     df["review_source"]     = review_source
 
-    # Recompute correctness using reviewed labels
-    df["issue_correct"]    = df["reviewed_issue"]    == df["true_issue"]
-    df["subissue_correct"] = df["reviewed_subissue"] == df["true_subissue"]
+    is_human = df["review_source"] == "human"
+
+    # Human-reviewed rows: trust the human, no need to verify against truth.
+    df.loc[is_human, "issue_correct"]    = True
+    df.loc[is_human, "subissue_correct"] = True
+
+    # Model-only rows: keep scoring against the ground truth as before.
+    df.loc[~is_human, "issue_correct"]    = df.loc[~is_human, "reviewed_issue"]    == df.loc[~is_human, "true_issue"]
+    df.loc[~is_human, "subissue_correct"] = df.loc[~is_human, "reviewed_subissue"] == df.loc[~is_human, "true_subissue"]
 
     return df
 
@@ -319,7 +327,14 @@ def _render_finalised_summary(
     review_rows: pd.DataFrame,
     dark_mode: bool,
 ):
-    """Shown after the user clicks Finalise Reviews."""
+    """Shown after the user clicks Finalise Reviews.
+
+    No accuracy stats here on purpose — once a human has reviewed a
+    complaint, they own that call. This shows the FULL final list: every
+    complaint's final issue/sub-issue, whether it came straight from the
+    model or was corrected by a human, with a badge marking the source and
+    the model's original guess shown alongside wherever a human changed it.
+    """
     df_rev    = st.session_state.results_with_review
     decisions = st.session_state.review_decisions
 
@@ -327,77 +342,81 @@ def _render_finalised_summary(
     border  = "rgba(255,255,255,0.08)" if dark_mode else "rgba(0,0,0,0.08)"
     text    = "#f1f5f9" if dark_mode else "#1e293b"
     muted   = "#94a3b8" if dark_mode else "#64748b"
-    card_bg = "rgba(99,102,241,0.08)"
 
     total_reviewed = len(decisions)
-    correct_after  = int(df_rev[df_rev["review_source"] == "human"]["subissue_correct"].sum())
-    overall_l2     = df_rev["subissue_correct"].mean()
+    total_rows     = len(df_rev)
 
     st.markdown(f"""
 <div style="background:{surface};border:1px solid {border};border-radius:8px;
-            padding:16px 20px;margin-bottom:12px">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-    <span style="font-weight:700;font-size:0.95rem;color:{PRIMARY}">
-      Review complete
-    </span>
-    <span style="font-size:11px;color:{PRIMARY};font-weight:600">
-      ✓ {total_reviewed} complaints reviewed
-    </span>
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-    <div style="background:{card_bg};border-radius:8px;padding:10px 12px">
-      <div style="font-size:10px;color:{muted};text-transform:uppercase;
-                  letter-spacing:.05em;margin-bottom:4px">Reviewed</div>
-      <div style="font-size:20px;font-weight:700;color:{text}">{total_reviewed}</div>
-    </div>
-    <div style="background:{card_bg};border-radius:8px;padding:10px 12px">
-      <div style="font-size:10px;color:{muted};text-transform:uppercase;
-                  letter-spacing:.05em;margin-bottom:4px">Correct (human)</div>
-      <div style="font-size:20px;font-weight:700;color:{ACCENT}">{correct_after} / {total_reviewed}</div>
-    </div>
-    <div style="background:{card_bg};border-radius:8px;padding:10px 12px">
-      <div style="font-size:10px;color:{muted};text-transform:uppercase;
-                  letter-spacing:.05em;margin-bottom:4px">Overall L2 accuracy</div>
-      <div style="font-size:20px;font-weight:700;color:{PRIMARY}">
-        {int(overall_l2 * 100)}%
-      </div>
-    </div>
-  </div>
+            padding:14px 18px;margin-bottom:12px;
+            display:flex;justify-content:space-between;align-items:center">
+  <span style="font-weight:700;font-size:0.95rem;color:{PRIMARY}">Review complete — final list</span>
+  <span style="font-size:11px;color:{PRIMARY};font-weight:600">
+    ✓ {total_reviewed} of {total_rows} updated by a human reviewer
+  </span>
 </div>""", unsafe_allow_html=True)
 
-    # Per-decision summary table
+    # Full final list: every complaint's final issue/sub-issue — the
+    # model's own answer where it was trusted, the human's correction
+    # where it wasn't.
     rows_html = ""
-    for row_idx, dec in decisions.items():
-        true_sub = results_df.loc[row_idx, "true_subissue"]
-        correct  = dec["subissue"] == true_sub
-        tick     = (
-            f"<span style='color:{ACCENT};font-weight:700'>✓</span>"
-            if correct
-            else f"<span style='color:{DANGER};font-weight:700'>✗</span>"
-        )
-        snip = results_df.loc[row_idx, "complaint_text"]
+    for row_idx, row in df_rev.iterrows():
+        snip = row["complaint_text"]
         snip = snip[:60] + "…" if len(snip) > 60 else snip
+
+        if row["review_source"] == "human":
+            model_issue    = row["predicted_issue_broad"]
+            model_subissue = row["predicted_subissue"]
+            human_issue    = row["reviewed_issue"]
+            human_subissue = row["reviewed_subissue"]
+
+            issue_cell = (
+                f"<span style='color:{muted};text-decoration:line-through'>{model_issue}</span> "
+                f"<span style='color:{muted}'>&rarr;</span> "
+                f"<span style='color:{ACCENT};font-weight:600'>{human_issue}</span>"
+                if human_issue != model_issue
+                else f"<span style='color:{text}'>{human_issue}</span>"
+            )
+            subissue_cell = (
+                f"<span style='color:{muted};text-decoration:line-through'>{model_subissue}</span> "
+                f"<span style='color:{muted}'>&rarr;</span> "
+                f"<span style='color:{ACCENT};font-weight:600'>{human_subissue}</span>"
+                if human_subissue != model_subissue
+                else f"<span style='color:{text}'>{human_subissue}</span>"
+            )
+            badge = (
+                f"<span style='background:rgba(99,102,241,0.15);color:{PRIMARY};"
+                f"padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600'>Human</span>"
+            )
+        else:
+            issue_cell    = f"<span style='color:{text}'>{row['reviewed_issue']}</span>"
+            subissue_cell = f"<span style='color:{text}'>{row['reviewed_subissue']}</span>"
+            badge = (
+                f"<span style='background:rgba(16,185,129,0.12);color:{ACCENT};"
+                f"padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600'>Model</span>"
+            )
+
         rows_html += f"""
 <tr>
   <td style="padding:7px 10px;font-size:11px;color:{muted}">{snip}</td>
-  <td style="padding:7px 10px;font-size:11px;color:{text}">{dec['subissue']}</td>
-  <td style="padding:7px 10px;font-size:11px;color:{muted}">{true_sub}</td>
-  <td style="padding:7px 10px;text-align:center">{tick}</td>
+  <td style="padding:7px 10px;font-size:11px">{issue_cell}</td>
+  <td style="padding:7px 10px;font-size:11px">{subissue_cell}</td>
+  <td style="padding:7px 10px;text-align:center">{badge}</td>
 </tr>"""
 
     st.markdown(f"""
-<div style="overflow-x:auto;border-radius:8px;border:1px solid {border};margin-bottom:14px">
+<div style="overflow:auto;max-height:480px;border-radius:8px;border:1px solid {border};margin-bottom:14px">
   <table style="width:100%;border-collapse:collapse;font-size:11px">
     <thead>
-      <tr style="background:{surface}">
+      <tr style="background:{surface};position:sticky;top:0">
         <th style="padding:8px 10px;text-align:left;font-size:10px;
                    text-transform:uppercase;letter-spacing:.05em;color:{muted}">Complaint</th>
         <th style="padding:8px 10px;text-align:left;font-size:10px;
-                   text-transform:uppercase;letter-spacing:.05em;color:{muted}">Your label</th>
+                   text-transform:uppercase;letter-spacing:.05em;color:{muted}">Final issue</th>
         <th style="padding:8px 10px;text-align:left;font-size:10px;
-                   text-transform:uppercase;letter-spacing:.05em;color:{muted}">True label</th>
+                   text-transform:uppercase;letter-spacing:.05em;color:{muted}">Final sub-issue</th>
         <th style="padding:8px 10px;text-align:center;font-size:10px;
-                   text-transform:uppercase;letter-spacing:.05em;color:{muted}">OK</th>
+                   text-transform:uppercase;letter-spacing:.05em;color:{muted}">Source</th>
       </tr>
     </thead>
     <tbody>{rows_html}</tbody>
@@ -409,7 +428,7 @@ def _render_finalised_summary(
     with col_dl:
         csv = df_rev.to_csv(index=False).encode("utf-8")
         st.download_button(
-            label="Download CSV (with human labels)",
+            label="Download CSV (final list)",
             data=csv,
             file_name="classifier_evaluation_reviewed.csv",
             mime="text/csv",

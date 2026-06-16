@@ -10,7 +10,7 @@ from complaint_generator import generate_synthetic_complaints
 from model_pipeline import HierarchicalComplaintClassifier, DEFAULT_REJECTION_THRESHOLD
 from human_review_section import render_review_queue
 
-st.set_page_config(page_title="Complaint Classifier AI", layout="wide")
+st.set_page_config(page_title="ComplaintIQ", layout="wide")
 
 # ── SESSION STATE DEFAULTS ────────────────────────────────────────────────────
 defaults = {
@@ -416,13 +416,15 @@ def render_dashboard(results: pd.DataFrame, dark_mode: bool):
         df["issue_correct"] = df["predicted_issue_broad"] == df["true_issue"]
     if "subissue_correct" not in df.columns:
         df["subissue_correct"] = df["predicted_subissue"] == df["true_subissue"]
+    if "review_source" not in df.columns:
+        df["review_source"] = "model"
     if "complaint_text" not in df.columns:
         df["complaint_text"] = ""
 
     cols_needed = [
         "complaint_text", "true_issue", "predicted_issue_broad",
         "issue_correct", "true_subissue", "predicted_subissue",
-        "subissue_correct", "joint_confidence", "needs_review",
+        "subissue_correct", "joint_confidence", "needs_review", "review_source",
     ]
     df = df[cols_needed].copy()
     df["issue_correct"]    = df["issue_correct"].fillna(False).astype(bool)
@@ -499,6 +501,7 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
 .badge{{padding:3px 9px;border-radius:4px;font-size:12px;font-weight:600}}
 .b-auto{{background:rgba(16,185,129,0.1);color:var(--accent)}}
 .b-review{{background:rgba(239,68,68,0.1);color:var(--danger)}}
+.b-human{{background:rgba(99,102,241,0.15);color:var(--primary)}}
 .match-y{{color:var(--accent);font-weight:700}}.match-n{{color:var(--danger);font-weight:700}}
 .conf-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px}}
 .c-hi{{background:rgba(16,185,129,0.15);color:var(--accent)}}
@@ -654,7 +657,9 @@ function render(){{
 
   document.querySelector('#dtbl tbody').innerHTML = sorted.map(r => {{
     const snip = r.complaint_text.length > 55 ? r.complaint_text.slice(0, 55) + '\u2026' : r.complaint_text;
-    const badge = r.needs_review ? '<span class="badge b-review">Review</span>' : '<span class="badge b-auto">Auto</span>';
+    const badge = r.review_source === 'human'
+      ? '<span class="badge b-human">Human</span>'
+      : (r.needs_review ? '<span class="badge b-review">Review</span>' : '<span class="badge b-auto">Auto</span>');
     const ic = r.issue_correct ? '<span class="match-y">✓</span>' : '<span class="match-n">✗</span>';
     const sc = r.subissue_correct ? '<span class="match-y">✓</span>' : '<span class="match-n">✗</span>';
     const conf = Math.round(r.joint_confidence * 100);
@@ -734,8 +739,8 @@ render();
 if not active_key:
     st.markdown(f"""
 <div style="padding:1.2rem 0 1rem 0;text-align:center">
-  <div style="font-size:2rem;font-weight:700;color:var(--text)">Student Loan Classifier AI</div>
-  <div style="font-size:0.95rem;opacity:0.6;margin-top:4px">Hierarchical NLP Pipeline Evaluation Dashboard</div>
+  <div style="font-size:2rem;font-weight:700;color:var(--text)">ComplaintIQ</div>
+  <div style="font-size:0.95rem;opacity:0.6;margin-top:4px"> AI-powered complaint classification, human-backed</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -809,8 +814,8 @@ with st.sidebar:
 
 st.markdown(f"""
 <div style="padding:1.2rem 0 1rem 0;text-align:center">
-  <div style="font-size:2rem;font-weight:700;color:var(--text)">Student Loan Classifier AI</div>
-  <div style="font-size:0.95rem;opacity:0.6;margin-top:4px">Hierarchical NLP Pipeline Evaluation Dashboard</div>
+  <div style="font-size:2rem;font-weight:700;color:var(--text)">ComplaintIQ</div>
+  <div style="font-size:0.95rem;opacity:0.6;margin-top:4px">AI-powered complaint classification, human-backed</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -852,6 +857,11 @@ if generate_clicked:
             results["true_issue"] = list(true_issues); results["true_subissue"] = list(true_subissues)
             results["issue_correct"] = results["predicted_issue_broad"] == results["true_issue"]
             results["subissue_correct"] = results["predicted_subissue"] == results["true_subissue"]
+            # If the model got the broad issue (L1) wrong, route it straight to human
+            # review — regardless of how confident it was.
+            if "needs_review" not in results.columns:
+                results["needs_review"] = False
+            results["needs_review"] = results["needs_review"] | (~results["issue_correct"])
             st.session_state.results_df = results
             st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Done! **{len(results)}** complaints classified. Check the results below."}
         except Exception as e:
@@ -867,7 +877,18 @@ panel_header("Results & Analysis")
 
 if st.session_state.results_open and st.session_state.results_df is not None:
     results = st.session_state.results_df
-    render_dashboard(results, st.session_state.dark_mode)
+
+    # Once the human review is finalised, the dashboard list refreshes to show
+    # the human-corrected issue/sub-issue values instead of the model's raw
+    # guess for those rows (the "Human" badge marks which ones changed).
+    if st.session_state.review_finalised and st.session_state.results_with_review is not None:
+        display_results = st.session_state.results_with_review.copy()
+        display_results["predicted_issue_broad"] = display_results["reviewed_issue"]
+        display_results["predicted_subissue"]    = display_results["reviewed_subissue"]
+    else:
+        display_results = results
+
+    render_dashboard(display_results, st.session_state.dark_mode)
     panel_header("Human Review Queue")
     if st.session_state.get("review_open", True): render_review_queue(results, st.session_state.dark_mode)
 elif st.session_state.results_open:
