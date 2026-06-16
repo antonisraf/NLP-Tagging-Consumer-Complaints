@@ -726,23 +726,30 @@ render();
 </body>
 </html>
 """
-    n      = len(results)
-    n_cats = max(results["true_issue"].nunique(), results["true_subissue"].nunique()) if n > 0 else 1
-    cat_row_h  = 24 + n_cats * 28
-    overview_h = 85 + 40 + 200 + cat_row_h + 8
-    detail_h   = 60 + min(n, 25) * 36 + 8
-    height     = max(overview_h, detail_h)
-    st.components.v1.html(html, height=height, scrolling=False)
+    st.components.v1.html(html, height=720, scrolling=True)
 
+
+# ── SVG BADGE (themed, inline) ────────────────────────────────────────────────
+def _badge_svg() -> str:
+    return (
+        f'<svg width="360" height="100" viewBox="0 0 360 100" xmlns="http://www.w3.org/2000/svg">'
+        f'<rect x="1" y="1" width="358" height="98" rx="18" fill="{surface}" stroke="{border}" stroke-width="1.5"/>'
+        f'<circle cx="50" cy="50" r="28" fill="{bg}"/>'
+        f'<path d="M 36 50 L 45 59 L 64 38" fill="none" stroke="{PRIMARY}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>'
+        f'<circle cx="64" cy="38" r="4.5" fill="{ACCENT}" stroke="{bg}" stroke-width="1.5"/>'
+        f'<line x1="94" y1="22" x2="94" y2="78" stroke="{border}" stroke-width="1"/>'
+        f'<text x="112" y="48" font-family="Georgia,serif" font-size="25" font-weight="700" letter-spacing="0.3" fill="{text}">ComplaintIQ</text>'
+        f'<text x="112" y="68" font-family="Arial,sans-serif" font-size="11" font-weight="600" letter-spacing="1.6" fill="{muted}">AI-POWERED &#183; HUMAN-BACKED</text>'
+        f'</svg>'
+    )
+
+def _badge_html() -> str:
+    b64 = base64.b64encode(_badge_svg().encode("utf-8")).decode("ascii")
+    return f'<div style="text-align:center;padding:1.2rem 0 1rem 0"><img src="data:image/svg+xml;base64,{b64}" style="max-width:360px;width:100%;height:auto"/></div>'
 
 # ── API KEY GATE ──────────────────────────────────────────────────────────────
 if not active_key:
-    st.markdown(f"""
-<div style="padding:1.2rem 0 1rem 0;text-align:center">
-  <div style="font-size:2rem;font-weight:700;color:var(--text)">ComplaintIQ</div>
-  <div style="font-size:0.95rem;opacity:0.6;margin-top:4px"> AI-powered complaint classification, human-backed</div>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown(_badge_html(), unsafe_allow_html=True)
 
     st.markdown(f"""
 <div class="key-modal">
@@ -812,12 +819,7 @@ with st.sidebar:
             use_container_width=True,
         )
 
-st.markdown(f"""
-<div style="padding:1.2rem 0 1rem 0;text-align:center">
-  <div style="font-size:2rem;font-weight:700;color:var(--text)">ComplaintIQ</div>
-  <div style="font-size:0.95rem;opacity:0.6;margin-top:4px">AI-powered complaint classification, human-backed</div>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(_badge_html(), unsafe_allow_html=True)
 
 if generate_clicked:
     allowed, secs_left = check_rate_limit()
