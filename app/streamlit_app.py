@@ -754,7 +754,7 @@ if not active_key:
     col_l, col_c, col_r = st.columns([1, 2, 1])
     with col_c:
         entered_key = st.text_input("Paste your Groq API key", type="password", placeholder="gsk_...", label_visibility="collapsed")
-        if st.button("Connect Pipeline", type="primary", use_container_width=True):
+        if st.button("Connect", type="primary", use_container_width=True):
             if validate_api_key(entered_key):
                 st.session_state.groq_api_key = entered_key.strip()
                 st.session_state.key_validated = True
