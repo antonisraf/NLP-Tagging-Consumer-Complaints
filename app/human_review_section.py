@@ -23,7 +23,10 @@ ACCENT        = "#10b981"  # Emerald 500 (Success)
 DANGER        = "#ef4444"  # Red 500
 
 
-# The canonical taxonomy used by the classifier.
+# The canonical taxonomy used by the classifier. Confirmed to match the
+# GROUPING dict in train_and_save_models.py and the taxonomy used by
+# complaint_generator.py: 2 broad issues, each with exactly 2 sub-issues
+# (4 sub-issues total, no overlap between groups).
 ISSUE_SUBISSUE_MAP: dict[str, list[str]] = {
     "Loan Servicing & Payments": [
         "Loan Information & Servicing",
@@ -36,6 +39,18 @@ ISSUE_SUBISSUE_MAP: dict[str, list[str]] = {
 }
 
 ALL_ISSUES = list(ISSUE_SUBISSUE_MAP.keys())
+
+# Flattened list of all 4 sub-issues, plus the reverse lookup that derives
+# the broad issue from a chosen sub-issue. Since each sub-issue belongs to
+# exactly one broad issue (strict hierarchy, no overlap), the broad issue
+# never needs to be picked independently — it's fully determined by the
+# sub-issue choice. This lets the review UI show a single dropdown with all
+# 4 sub-issues at once, instead of two cascading dropdowns where picking a
+# broad issue first would only reveal the 2 sub-issues under it.
+ALL_SUBISSUES = [sub for subs in ISSUE_SUBISSUE_MAP.values() for sub in subs]
+SUBISSUE_TO_ISSUE = {
+    sub: issue for issue, subs in ISSUE_SUBISSUE_MAP.items() for sub in subs
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -258,6 +273,9 @@ def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
 
         col_issue, col_sub, col_btn = st.columns([2, 2, 1])
 
+        # Both dropdowns are fully independent and manually selectable — the
+        # broad issue dropdown shows all 2 options and the sub-issue dropdown
+        # shows all 4 options, with no filtering/auto-derivation between them.
         with col_issue:
             chosen_issue = st.selectbox(
                 "Broad issue",
@@ -267,18 +285,11 @@ def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
                 label_visibility="collapsed",
             )
 
-        valid_subissues = ISSUE_SUBISSUE_MAP[chosen_issue]
-        default_sub = (
-            current_subissue
-            if current_subissue in valid_subissues
-            else valid_subissues[0]
-        )
-
         with col_sub:
             chosen_sub = st.selectbox(
                 "Sub-issue",
-                options=valid_subissues,
-                index=valid_subissues.index(default_sub),
+                options=ALL_SUBISSUES,
+                index=ALL_SUBISSUES.index(current_subissue) if current_subissue in ALL_SUBISSUES else 0,
                 key=f"review_sub_{row_idx}",
                 label_visibility="collapsed",
             )
