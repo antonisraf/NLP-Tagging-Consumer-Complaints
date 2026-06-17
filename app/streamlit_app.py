@@ -515,8 +515,8 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
     <div class="metric"><div class="metric-label">Total</div><div class="metric-value" id="m-total">0</div><div class="metric-sub" id="m-total-sub"></div></div>
     <div class="metric"><div class="metric-label">Auto-Labelled</div><div class="metric-value" id="m-auto">0</div><div class="metric-sub" id="m-auto-pct"></div></div>
     <div class="metric"><div class="metric-label">Needs Review</div><div class="metric-value" id="m-review">0</div><div class="metric-sub" id="m-review-pct"></div></div>
-    <div class="metric"><div class="metric-label">L1 Accuracy</div><div class="metric-value" id="m-l1">0%</div><div class="metric-sub">auto-labelled only</div></div>
-    <div class="metric"><div class="metric-label">L2 Accuracy</div><div class="metric-value" id="m-l2">0%</div><div class="metric-sub">auto-labelled only</div></div>
+    <div class="metric"><div class="metric-label">L1 Accuracy</div><div class="metric-value" id="m-l1">0%</div><div class="metric-sub">all complaints</div></div>
+    <div class="metric"><div class="metric-label">L2 Accuracy</div><div class="metric-value" id="m-l2">0%</div><div class="metric-sub">all complaints</div></div>
   </div>
 
   <div class="tabs">
@@ -580,8 +580,12 @@ function render(){{
   const data = ALL.map((r, i) => ({{ ...r, idx: i }}));
   const autoR = data.filter(r => !r.needs_review);
   const revR  = data.filter(r =>  r.needs_review);
-  const l1Acc = autoR.length ? autoR.filter(r => r.issue_correct).length / autoR.length : 0;
-  const l2Acc = autoR.length ? autoR.filter(r => r.subissue_correct).length / autoR.length : 0;
+  // L1/L2 accuracy is computed over ALL complaints (raw model performance),
+  // not just the auto-labelled subset — rows are routed to human review
+  // precisely when the model got L1 wrong, so restricting to autoR would
+  // always show 100% L1 accuracy regardless of real performance.
+  const l1Acc = data.length ? data.filter(r => r.issue_correct).length / data.length : 0;
+  const l2Acc = data.length ? data.filter(r => r.subissue_correct).length / data.length : 0;
 
   document.getElementById('m-total').textContent = data.length;
   document.getElementById('m-total-sub').textContent = `${{TOTAL}} complaints`;
@@ -589,8 +593,8 @@ function render(){{
   document.getElementById('m-auto-pct').textContent = data.length ? Math.round(autoR.length/data.length*100) + '% of total' : '--';
   document.getElementById('m-review').textContent = revR.length;
   document.getElementById('m-review-pct').textContent = data.length ? Math.round(revR.length/data.length*100) + '% of total' : '--';
-  document.getElementById('m-l1').textContent = autoR.length ? Math.round(l1Acc*100) + '%' : '--';
-  document.getElementById('m-l2').textContent = autoR.length ? Math.round(l2Acc*100) + '%' : '--';
+  document.getElementById('m-l1').textContent = data.length ? Math.round(l1Acc*100) + '%' : '--';
+  document.getElementById('m-l2').textContent = data.length ? Math.round(l2Acc*100) + '%' : '--';
 
   if (!data.length) {{
     const ph = '<div style="height:60px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px">No data yet</div>';
@@ -619,13 +623,13 @@ function render(){{
 
   const issues = unique(data.map(r => r.true_issue));
   document.getElementById('l1-cat').innerHTML = issues.map(iss => {{
-    const rows = autoR.filter(r => r.true_issue === iss);
+    const rows = data.filter(r => r.true_issue === iss);
     return barRow(iss, rows.length ? rows.filter(r => r.issue_correct).length/rows.length : 0, 'var(--primary)');
   }}).join('') || '<div style="font-size:11px;color:var(--muted);padding:8px 0">No data.</div>';
 
   const subs = unique(data.map(r => r.true_subissue));
   document.getElementById('l2-cat').innerHTML = subs.map(s => {{
-    const rows = autoR.filter(r => r.true_subissue === s);
+    const rows = data.filter(r => r.true_subissue === s);
     return barRow(s, rows.length ? rows.filter(r => r.subissue_correct).length/rows.length : 0, 'var(--primary)');
   }}).join('') || '<div style="font-size:11px;color:var(--muted);padding:8px 0">No data.</div>';
 
