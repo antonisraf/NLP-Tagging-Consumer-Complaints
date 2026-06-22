@@ -89,7 +89,7 @@ def generate_synthetic_complaints(n=10, api_key=None, topics=None, num_examples=
         prompt = f"""You are generating SYNTHETIC test data for an NLP classifier that
 categorizes CFPB student loan complaints.
 
-The classifier uses EXACTLY this two-level taxonomy — use no other strings:
+The classifier uses EXACTLY this two-level taxonomy, use no other strings:
 
   Broad issue: "Loan Servicing & Payments"
     Sub-issue A: "Loan Information & Servicing"
@@ -107,7 +107,7 @@ The classifier uses EXACTLY this two-level taxonomy — use no other strings:
 Generate {batch_n} new, fully synthetic complaint narratives about student loans.
 
 Requirements:
-- First-person, consumer voice — sometimes frustrated or informal.
+- First-person, consumer voice, sometimes frustrated or informal.
 - 2–6 sentences each.
 - No real names, account numbers, or identifying details.
 - Spread the {batch_n} complaints across all four sub-issues as evenly as possible.{topic_hint}

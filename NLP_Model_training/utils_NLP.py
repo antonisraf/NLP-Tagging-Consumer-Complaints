@@ -86,20 +86,20 @@ def get_issue_mapping():
     1-to-1 with Level 2 semantic groups to ensure structural harmony.
     """
     return {
-        # 1. Loan Management -> Αντιστοιχεί στο Loan Information & Servicing
+        # 1. Loan Management -> Maps to Loan Information & Servicing
         'Dealing with your lender or servicer':                      'Loan Information & Servicing',
         
-        # 2. Repayment Issues -> Αντιστοιχεί στο Payment & Repayment Issues
+        # 2. Repayment Issues -> Maps to Payment & Repayment Issues
         'Struggling to repay your loan':                            'Payment & Repayment Issues',
         
-        # 3. Credit Report Issues -> Αντιστοιχεί στο Credit Reporting Issues
+        # 3. Credit Report Issues -> Maps to Credit Reporting Issues
         'Incorrect information on your report':                     'Credit Reporting Issues',
         'Improper use of your report':                              'Credit Reporting Issues',
         "Problem with a company's investigation into an existing problem": 'Credit Reporting Issues',
         'Unable to get your credit report or credit score':         'Credit Reporting Issues',
         "Problem with a credit reporting company's investigation into an existing problem": 'Credit Reporting Issues',
         
-        # 4. Loan Acquisition -> Αντιστοιχεί στο Loan Acquisition & Eligibility
+        # 4. Loan Acquisition -> Maps to Loan Acquisition & Eligibility
         'Getting a loan':                                           'Loan Acquisition & Eligibility',
         'Issue where my lender is my school':                       'Loan Acquisition & Eligibility',
         'Issue with income share agreement':                        'Loan Acquisition & Eligibility',

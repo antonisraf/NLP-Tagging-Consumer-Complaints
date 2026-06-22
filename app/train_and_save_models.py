@@ -1,6 +1,6 @@
 """
-Trains the hierarchical (2-level) student loan complaint classifier — the
-same architecture used for evaluation in model_evaluation.py — and saves all
+Trains the hierarchical (2-level) student loan complaint classifier, the
+same architecture used for evaluation in model_evaluation.py and saves all
 fitted artifacts to a single joblib bundle, so the Streamlit app can load a
 ready-to-use pipeline without retraining on every run.
 
