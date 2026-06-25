@@ -11,10 +11,10 @@ A utility module containing helper functions for text cleaning, data augmentatio
 
 * **`clean_tfidf_text(text)`**: Aggressive preprocessing specialized for TF-IDF vectorization. Handles lowercasing, URL removal, redaction marker removal (`XXXX`), number and punctuation stripping, stopword removal, single-character token filtering, and lemmatization using a noun-first/verb-fallback strategy to reduce vocabulary size and noise.
 * **`back_translate(text, mid_lang)`**: Leverages the Google Translate API to translate text into an intermediate language (German) and back to English to generate paraphrased variations for data augmentation. Texts exceeding `BACK_TRANSLATE_MAX_CHARS` (5000 characters) are skipped entirely to avoid augmenting incomplete or truncated samples.
-* **`back_translate_dataframe(df, ...)`**: Uses multithreading via `ThreadPoolExecutor` to execute back-translations concurrently across a pandas DataFrame. Rate limiting is enforced via a `threading.Semaphore` to ensure requests are spaced out across threads rather than firing simultaneously.
-* **`get_issue_mapping()`**: Dictates the structural grouping of raw `Issue` labels into 3 broad semantic classes.
+* **`back_translate_dataframe(df, ...)`**: Uses multithreading via `ThreadPoolExecutor` to execute back-translations concurrently across a pandas DataFrame. A per-row `time.sleep` delay is applied to space out requests across threads.
+* **`get_issue_mapping()`**: Dictates the structural grouping of raw `Issue` labels into 4 broad semantic classes.
 * **`filter_by_vocab_count(df, text_column, min_unique, max_unique)`**: Filters rows based on the number of unique tokens in the cleaned text. Removes entries with too few unique tokens (likely empty or junk text) and entries with too many unique tokens (likely data dumps or malformed entries). Applied before train/test split to avoid leakage. Returns the filtered DataFrame and a stats dictionary.
-* **`get_valid_subissues()`**: Returns the list of `Sub-issue` labels retained after frequency filtering. Sub-issues with more than 500 samples are kept as distinct classes; all remaining Sub-issues are grouped under `'Other'`.
+* **`get_subissue_mapping()`**: Returns the mapping dictionary for grouping `Sub-issue` labels into 4 semantic groups: `Payment & Repayment Issues`, `Loan Information & Servicing`, `Credit Reporting Issues`, and `Loan Acquisition & Eligibility`. Unmapped sub-issues are assigned to `'Other'`.
 
 ### `vectorizer.py`
 The main execution script that controls the data preparation and vectorization workflow. It loads the dataset, cleans the text fields, applies vocabulary-based filtering, applies targeted data augmentation, splits the data, fits the TF-IDF vectorizer, and saves the final processed data splits and model artifacts.
@@ -36,8 +36,8 @@ After text cleaning and before the train/test split, rows are filtered based on 
 
 ### Label Engineering & Grouping
 To combat extreme class sparsity and improve classification performance, data grouping logic is applied to target labels:
-* **Issue Mapping**: Original complaints span numerous distinct issues. These are compressed into three semantic categories: `Loan Management`, `Credit Report Issues`, and `Loan Acquisition`. Infrequent categories with fewer than 200 samples are dropped entirely.
-* **Sub-Issue Filtering**: Sub-issues with fewer than 500 total occurrences are dynamically re-assigned to a catch-all `'Other'` class to prevent high-variance errors in downstream models.
+* **Issue Mapping**: Original complaints span numerous distinct issues. These are compressed into four semantic categories: `Loan Information & Servicing`, `Payment & Repayment Issues`, `Credit Reporting Issues`, and `Loan Acquisition & Eligibility`.
+* **Sub-Issue Filtering**: unmapped sub-issues (not found in the mapping dictionary) are assigned to `Other` class to prevent high-variance errors in downstream models.
 
 ### Data Split & Augmentation Strategy
 1. **Stratified Splitting**: The dataset is split into an 80/20 train/test ratio using stratification on the grouped `Issue` label. This guarantees balanced class representations across both sets.
