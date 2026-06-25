@@ -59,43 +59,4 @@ The `TfidfVectorizer` transforms the normalized text into sparse matrices using 
 
 The data transitions through the following file paths and structures during execution:
 
-## Student Loan NLP Pipeline
-
-```
-data/student_loan_nlp_clean.csv
-            │
-            ▼
-  Text Cleaning (clean_tfidf_text)
-            │
-            ▼
-  Vocabulary-Based Filtering
-  (filter_by_vocab_count)
-            │
-            ▼
-  Label Mapping & Sub-issue Grouping
-            │
-            ▼
-  Stratified Train/Test Split (80/20)
-            │
-    ┌───────┴───────┐
-    ▼               ▼
-[Train Split]   [Test Split]
-    │               │
-    ▼               │
-Targeted            │
-Back-Translation    │
-(Loan Acq. Only)    │
-    │               │
-    ▼               ▼
-Fit & Transform  Transform
-   TF-IDF         Only
-    └───────┬───────┘
-            │
-            ▼
-      Saved Artifacts:
-  ├── data/X_train_tfidf.npz
-  ├── data/X_test_tfidf.npz
-  ├── data/tfidf_vectorizer.pkl
-  ├── data/student_loan_augmented.csv
-  └── data/student_loan_test.csv
-```
+![NLP Model Training Pipeline](NLP_Model_training_pipeline.png)
