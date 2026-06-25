@@ -20,14 +20,14 @@ The operational evaluation script that builds a fixed, simplified version of the
 Both scripts follow the same general shape: a Level 1 model predicts a broad group, its predicted probabilities are fed as additional features (via `hstack` with the TF-IDF matrix) into a separate Level 2 model trained only on the rows belonging to that group. Out-of-fold (OOF) Level 1 probabilities are computed via `cross_val_predict` for the training set so that the Level 2 models never see Level 1 probabilities that were produced by a model trained on the same rows.
 
 ### Level 1: Broad Issue Classification
-* **`hierarchical_baseline_experiment.py`**: Level 1 target is `Issue_grouped`, a 4-class label set (`Loan Information & Servicing`, `Payment & Repayment Issues`, `Credit Reporting Issues`, `Loan Acquisition & Eligibility`) coming from `get_issue_mapping()`. Both Logistic Regression and a calibrated `LinearSVC` are tuned via `GridSearchCV` over `C in [0.01, 0.1, 0.5, 1.0]`, using 5-fold stratified CV and `f1_macro` scoring.
+* **`hierarchical_baseline_experiment.py`**: Level 1 target is `Issue_grouped`, a 4-class label set (`Loan Information & Servicing`, `Payment & Repayment Issues`, `Credit Reporting Issues`, `Loan Acquisition & Eligibility`) loaded directly from the training CSV. Both Logistic Regression and a calibrated `LinearSVC` are tuned via `GridSearchCV` over `C in [0.01, 0.1, 0.5, 1.0]`, using 5-fold stratified CV and `f1_macro` scoring.
 * **`model_evaluation.py`**: Level 1 target is a 2-class label (`Loan Servicing & Payments` vs `Non-Servicing Issues`) derived directly from `Subissue_grouped` via a local `GROUPING` dict, not from `Issue_grouped`. Both models use a fixed `C=1.0` with no grid search.
 
 ### Soft-Vote Ensemble & Out-of-Fold Cascading
 In both scripts, Level 1 predictions are produced by averaging the predicted probabilities of the Logistic Regression model and the calibrated `LinearSVC` ("soft voting"). The same averaging is applied to the OOF probabilities used as Level 2 input features.
 
 ### Level 2: Sub-issue Classification with Feature Cascading
-For each Level 1 group, a separate Level 2 model is trained on `hstack([TF-IDF features, Level 1 probability features])`, with the target being `Subissue_grouped`.
+For each Level 1 group, a separate Level 2 model is trained on `hstack([TF-IDF features, Level 1 probability features])`, with the target being `Subissue_grouped`. The two scripts differ in how they produce the per-group TF-IDF features: `hierarchical_baseline_experiment.py` re-vectorizes the raw text for each group via `tfidf.transform(cleaned_text)`, while `model_evaluation.py` slices the pre-computed `X_train` matrix directly (`X_train[mask]`).
 * **`hierarchical_baseline_experiment.py`**: Uses `GridSearchCV` over `C in [0.1, 1.0, 5.0]` for both LR and the calibrated `LinearSVC`. Includes edge-case handling: groups with only one Sub-issue class are assigned that class directly with confidence 1.0 and no model is trained; groups where the smallest class has fewer than 2 samples skip the SVC entirely and use LR only.
 * **`model_evaluation.py`**: Uses fixed `C=1.0` for both LR and `LinearSVC` for every group, with no grid search and no special-casing for single-class or very small groups.
 
@@ -65,5 +65,3 @@ data/tfidf_vectorizer.pkl
 * `model_evaluation.py`: console output (classification reports and confusion matrices at the chosen threshold) plus `plots/nlp_performance_dashboard.png`.
 
 ---
-
-
