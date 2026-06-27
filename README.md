@@ -14,7 +14,7 @@ ComplaintIQ is a machine-learning system that automatically classifies consumer 
 
 ## Stage 1 — Exploratory Data Analysis
 
-The raw dataset contains approximately 52,988 records and 16 features, covering CFPB complaints submitted between 2023 and early 2026. After filtering for records with a non-null complaint narrative, 25,603 usable samples remain. The dataset spans 12 unique Issues and 52 unique Sub-issues arranged in a natural hierarchy, with a heavily skewed distribution — the most common Issue accounts for over 30,000 complaints. A Cramér's V correlation analysis confirmed that all metadata columns (company, state, submission channel) score below 0.25 in association with the target labels, establishing the free-text narrative as the only feature with predictive value. A length-based filter drops complaints below the 25th percentile character count as a quality gate before export.
+The raw dataset contains approximately 52,988 records and 16 features, covering CFPB complaints submitted between 2023 and early 2026. After filtering for records with a non-null complaint narrative, 25,603 usable samples remain. The dataset spans 12 unique Issues and 52 unique Sub-issues arranged in a natural hierarchy, with a heavily skewed distribution the most common Issue accounts for over 30,000 complaints. A Cramér's V correlation analysis confirmed that all metadata columns (company, state, submission channel) score below 0.25 in association with the target labels, establishing the free-text narrative as the only feature with predictive value. A length-based filter drops complaints below the 25th percentile character count as a quality gate before export.
 
 > For the full analysis including label distributions, compliance trends, and column pruning decisions → [`EDA/Report_EDA.md`](EDA/Report_EDA.md)
 
@@ -92,7 +92,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Open `.env` and set `GROQ_API_KEY=gsk_...`. The key can also be entered directly in the app on first launch — it is session-scoped and never written to disk.
+Open `.env` and set `GROQ_API_KEY=gsk_...`. The key can also be entered directly in the app on first launch  it is session-scoped and never written to disk.
 
 ### 3. Build artifacts & launch
 
