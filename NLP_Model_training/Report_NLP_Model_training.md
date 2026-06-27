@@ -26,7 +26,7 @@ The main execution script that controls the data preparation and vectorization w
 ### Text Preprocessing Logic
 For TF-IDF, the script uses `clean_tfidf_text` to normalize tokens:
 * **Noise Reduction**: Characters matching numbers, punctuation, and specific credit/loan content masking tokens (e.g., `XXXX`) are stripped away. Single-character tokens are also removed as they carry no semantic value.
-* **Dimensionality Minimization**: Lemmatization via NLTK's `WordNetLemmatizer` uses a noun-first/verb-fallback strategy — each token is first lemmatized as a noun, and if the form is unchanged, it is re-lemmatized as a verb. This ensures morphological variations (e.g., "payments" → "payment", "servicing" → "service") do not inflate the feature space with redundant near-duplicate terms, which would otherwise reduce the discriminative power of TF-IDF weights.
+* **Dimensionality Minimization**: Lemmatization via NLTK's `WordNetLemmatizer` uses a noun-first/verb-fallback strategy each token is first lemmatized as a noun, and if the form is unchanged, it is re-lemmatized as a verb. This ensures morphological variations (e.g., "payments" → "payment", "servicing" → "service") do not inflate the feature space with redundant near-duplicate terms, which would otherwise reduce the discriminative power of TF-IDF weights.
 
 ### Vocabulary-Based Filtering
 After text cleaning and before the train/test split, rows are filtered based on unique token count:
@@ -36,7 +36,7 @@ After text cleaning and before the train/test split, rows are filtered based on 
 
 ### Label Engineering & Grouping
 To combat extreme class sparsity and improve classification performance, data grouping logic is applied to target labels:
-* **Issue Mapping**: Original complaints span numerous distinct issues. These are compressed into four semantic categories: `Loan Information & Servicing`, `Payment & Repayment Issues`, `Credit Reporting Issues`, and `Loan Acquisition & Eligibility`. Grouping at this level of granularity reflects genuine operational distinctions between complaint types — each category maps to a different resolution pathway — while remaining coarse enough to maintain adequate per-class sample counts for reliable model training.
+* **Issue Mapping**: Original complaints span numerous distinct issues. These are compressed into four semantic categories: `Loan Information & Servicing`, `Payment & Repayment Issues`, `Credit Reporting Issues`, and `Loan Acquisition & Eligibility`. Grouping at this level of granularity reflects genuine operational distinctions between complaint types each category maps to a different resolution pathway  while remaining coarse enough to maintain adequate per-class sample counts for reliable model training.
 * **Sub-Issue Filtering**: unmapped sub-issues (not found in the mapping dictionary) are assigned to `Other` class to prevent high-variance errors in downstream models.
 
 ### Data Split & Augmentation Strategy
@@ -50,7 +50,7 @@ The `TfidfVectorizer` transforms the normalized text into sparse matrices using 
 
 * `max_features=50000`: Limits the vocabulary to the top 50,000 terms ranked by corpus-wide TF-IDF score. This ceiling is intentionally generous given the domain: consumer complaint narratives are verbose and lexically diverse, and an overly restrictive vocabulary would discard meaningful low-frequency domain terms (e.g., specific loan program names or regulatory references). At the same time, an uncapped vocabulary would introduce excessive noise and slow downstream model training without meaningful accuracy gains.
 
-* `ngram_range=(1, 2)`: Captures both individual words (unigrams) and two-word phrases (bigrams). Bigrams are particularly valuable in this domain because complaint semantics are often phrase-dependent — "interest rate" and "payment plan" carry distinct meaning that unigrams alone cannot represent. Trigrams were excluded as they added feature-space dimensionality with marginal discriminative return at this corpus size.
+* `ngram_range=(1, 2)`: Captures both individual words (unigrams) and two-word phrases (bigrams). Bigrams are particularly valuable in this domain because complaint semantics are often phrase-dependent  "interest rate" and "payment plan" carry distinct meaning that unigrams alone cannot represent. Trigrams were excluded as they added feature-space dimensionality with marginal discriminative return at this corpus size.
 
 * `min_df=3`: Terms appearing in fewer than 3 documents are discarded. This threshold filters out unique typos, rare proper nouns, and one-off complaint-specific references that would not generalise across unseen complaints, while still retaining low-frequency but meaningful domain terminology.
 

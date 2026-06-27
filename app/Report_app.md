@@ -37,20 +37,20 @@ app/
 ### `streamlit_app.py`
 The main application entry point. Handles the full user-facing experience:
 
-- **API Key Gate** — prompts the user for a Groq API key (`gsk_...` format) on first launch. The key is validated client-side, stored in session state, and never persisted.
-- **Session Rate Limiting** — caps complaint generation at **5 runs per hour** per session to manage Groq API usage.
+- **API Key Gate**  prompts the user for a Groq API key (`gsk_...` format) on first launch. The key is validated client-side, stored in session state, and never persisted.
+- **Session Rate Limiting**  caps complaint generation at **5 runs per hour** per session to manage Groq API usage.
 - **Three-Tab Layout**:
-  - **Activity Log** — chat-style log showing the status of each pipeline run. Controls for the number of complaints (10–25) and the joint confidence threshold are also here.
-  - **Results & Analysis** — renders a dashboard with classification accuracy metrics, confusion matrices, and a per-complaint results table. After human review is finalised, the dashboard reflects the updated (human-corrected) labels.
-  - **Human Review Queue** — delegates to `human_review_section.py`.
-- **Sidebar** — shows API connection status, session run count, CSV download, and reset/key-change buttons.
-- **Theming** — dark-mode-only glass-morphism UI using CSS custom properties (Inter font, Slate/Indigo palette, radial gradient background).
+  - **Activity Log**  chat-style log showing the status of each pipeline run. Controls for the number of complaints (10–25) and the joint confidence threshold are also here.
+  - **Results & Analysis** renders a dashboard with classification accuracy metrics, confusion matrices, and a per-complaint results table. After human review is finalised, the dashboard reflects the updated (human-corrected) labels.
+  - **Human Review Queue**  delegates to `human_review_section.py`.
+- **Sidebar**  shows API connection status, session run count, CSV download, and reset/key-change buttons.
+- **Theming** dark-mode-only glass-morphism UI using CSS custom properties (Inter font, Slate/Indigo palette, radial gradient background).
 
 **Key pipeline flow on "Generate & Classify":**
 1. Calls `generate_synthetic_complaints()` to produce `n` labelled synthetic complaints via Groq.
 2. Runs them through `HierarchicalComplaintClassifier.predict()`.
 3. Compares predictions against the synthetic ground-truth labels.
-4. Forces `needs_review = True` for any row where the broad issue (Level 1) was predicted incorrectly — on top of the model's own confidence-based flagging.
+4. Forces `needs_review = True` for any row where the broad issue (Level 1) was predicted incorrectly  on top of the model's own confidence-based flagging.
 5. Stores the full results DataFrame in `st.session_state`.
 
 ---
@@ -93,7 +93,7 @@ Renders the **Human Review Queue** tab and manages the review lifecycle.
 - **Finalise Reviews** is only enabled once all flagged complaints have a decision. Clicking it calls `apply_review_decisions()`, which writes `reviewed_issue`, `reviewed_subissue`, and `review_source` (`"human"` or `"model"`) back to the DataFrame.
 
 **Accuracy treatment after finalisation:**
-- Human-reviewed rows are marked `issue_correct = True` and `subissue_correct = True` — the human takes ownership of those labels; they are not scored against the synthetic ground truth.
+- Human-reviewed rows are marked `issue_correct = True` and `subissue_correct = True` the human takes ownership of those labels; they are not scored against the synthetic ground truth.
 - Model-only rows retain their original accuracy verdicts.
 
 After finalisation the Results tab reflects the updated labels and recomputes metrics accordingly.
