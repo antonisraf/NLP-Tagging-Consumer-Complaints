@@ -43,7 +43,7 @@ ALL_ISSUES = list(ISSUE_SUBISSUE_MAP.keys())
 # Flattened list of all 4 sub-issues, plus the reverse lookup that derives
 # the broad issue from a chosen sub-issue. Since each sub-issue belongs to
 # exactly one broad issue (strict hierarchy, no overlap), the broad issue
-# never needs to be picked independently — it's fully determined by the
+# never needs to be picked independently, it's fully determined by the
 # sub-issue choice. This lets the review UI show a single dropdown with all
 # 4 sub-issues at once, instead of two cascading dropdowns where picking a
 # broad issue first would only reveal the 2 sub-issues under it.
@@ -273,7 +273,7 @@ def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
 
         col_issue, col_sub, col_btn = st.columns([2, 2, 1])
 
-        # Both dropdowns are fully independent and manually selectable — the
+        # Both dropdowns are fully independent and manually selectable, the
         # broad issue dropdown shows all 2 options and the sub-issue dropdown
         # shows all 4 options, with no filtering/auto-derivation between them.
         with col_issue:
@@ -340,7 +340,7 @@ def _render_finalised_summary(
 ):
     """Shown after the user clicks Finalise Reviews.
 
-    No accuracy stats here on purpose — once a human has reviewed a
+    No accuracy stats here on purpose. Once a human has reviewed a
     complaint, they own that call. This shows the FULL final list: every
     complaint's final issue/sub-issue, whether it came straight from the
     model or was corrected by a human, with a badge marking the source and
@@ -367,7 +367,7 @@ def _render_finalised_summary(
   </span>
 </div>""", unsafe_allow_html=True)
 
-    # Full final list: every complaint's final issue/sub-issue — the
+    # Full final list: every complaint's final issue/sub-issue, the
     # model's own answer where it was trusted, the human's correction
     # where it wasn't.
     rows_html = ""

@@ -8,7 +8,7 @@ This report summarizes the exploratory analysis conducted on a dataset of consum
 
 The dataset contains approximately 52,988 records and 16 features, covering complaints submitted between 2023 and early 2026. Most columns are categorical and describe metadata about each complaint, such as the company involved, the submission channel, the state of the consumer, and how the company responded. The free-text field, Consumer complaint narrative, is the most valuable column for our purposes as it contains the actual description written by the consumer. However, it is missing in roughly half of all records, leaving 25,603 usable samples after filtering.
 
-Several columns were identified as too sparse or uninformative to be useful. Tags and Company public response are missing in over 74% and 90% of records respectively. The Product column contains only one unique value across the entire dataset and was dropped entirely.
+Several columns were identified as too sparse or uninformative to be useful. Tags and Company public response are missing in over 90% and 74% of records respectively. The Product column contains only one unique value across the entire dataset and was dropped entirely.
 
 ## Complaint Trends and Key Players
 

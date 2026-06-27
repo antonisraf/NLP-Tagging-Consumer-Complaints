@@ -18,7 +18,7 @@ nlp_data = pd.read_csv('data/student_loan_nlp_clean.csv')
 # Clean the text using TF-IDF specific preprocessing (lemmatization, stopword removal, etc.)
 nlp_data['cleaned_text'] = nlp_data['Consumer complaint narrative'].apply(clean_tfidf_text)
 
-# Vocabulary-based filtering — πριν το split
+# Vocabulary-based filtering, before the split
 nlp_data, vocab_stats = filter_by_vocab_count(
     nlp_data,
     text_column='cleaned_text',
@@ -35,7 +35,7 @@ print(f"  Mean unique   : {vocab_stats['mean_unique']} tokens")
 print(f"  Median unique : {vocab_stats['median_unique']} tokens")
 print(f"  Mean total    : {vocab_stats['mean_tokens']} tokens")
 
-# Group the original Issues into 3 semantic groups
+# Group the original Issues into 4 semantic groups
 issue_mapping = get_issue_mapping()
 nlp_data['Issue_grouped'] = nlp_data['Issue'].map(issue_mapping)
 nlp_data = nlp_data.dropna(subset=['Issue_grouped'])
