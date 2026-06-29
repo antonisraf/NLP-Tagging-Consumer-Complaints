@@ -1,8 +1,8 @@
-# ComplaintIQ
+# ComplaintFlow
 
 > **AI-powered complaint classification, human-backed.**
 
-ComplaintIQ is a machine-learning system that automatically classifies consumer student loan complaints sourced from the Consumer Financial Protection Bureau (CFPB) into structured Issue and Sub-issue labels, eliminating the need for manual tagging. The system combines a hierarchical NLP classifier with a human review queue, exposed through a Streamlit dashboard that generates synthetic complaints, runs them through the pipeline, and surfaces low-confidence predictions for human correction.
+ComplaintFlow is a machine-learning system that automatically classifies consumer student loan complaints sourced from the Consumer Financial Protection Bureau (CFPB) into structured Issue and Sub-issue labels, eliminating the need for manual tagging. The system combines a hierarchical NLP classifier with a human review queue, exposed through a Streamlit dashboard that generates synthetic complaints, runs them through the pipeline, and surfaces low-confidence predictions for human correction.
 
 ---
 
@@ -12,7 +12,7 @@ ComplaintIQ is a machine-learning system that automatically classifies consumer 
 
 ---
 
-## Stage 1 — Exploratory Data Analysis
+## Stage 1: Exploratory Data Analysis
 
 The raw dataset contains approximately 52,988 records and 16 features, covering CFPB complaints submitted between 2023 and early 2026. After filtering for records with a non-null complaint narrative, 25,603 usable samples remain. The dataset spans 12 unique Issues and 52 unique Sub-issues arranged in a natural hierarchy, with a heavily skewed distribution the most common Issue accounts for over 30,000 complaints. A Cramér's V correlation analysis confirmed that all metadata columns (company, state, submission channel) score below 0.25 in association with the target labels, establishing the free-text narrative as the only feature with predictive value. A length-based filter drops complaints below the 25th percentile character count as a quality gate before export.
 
@@ -20,7 +20,7 @@ The raw dataset contains approximately 52,988 records and 16 features, covering 
 
 ---
 
-## Stage 2 — Text Preprocessing & TF-IDF Vectorization
+## Stage 2: Text Preprocessing & TF-IDF Vectorization
 
 Raw narratives are passed through an aggressive cleaning pipeline: lowercasing, URL and redaction marker removal, number and punctuation stripping, stopword removal, and noun-first/verb-fallback lemmatization. Rows with fewer than 5 or more than 500 unique tokens after cleaning are filtered out before the train/test split. The original 52 Sub-issues are consolidated into 4 semantic groups to address extreme class sparsity. Back-translation via German is applied as a data augmentation strategy, strictly limited to the minority class (`Loan Acquisition & Eligibility`) within the training split to avoid test contamination. The TF-IDF vectorizer is configured with a 50,000-term vocabulary, unigrams and bigrams, `min_df=3`, `max_df=0.95`, and logarithmic TF scaling.
 
@@ -28,7 +28,7 @@ Raw narratives are passed through an aggressive cleaning pipeline: lowercasing, 
 
 ---
 
-## Stage 3 — Hierarchical Model Training & Evaluation
+## Stage 3: Hierarchical Model Training & Evaluation
 
 The classifier operates in two cascaded levels. Level 1 predicts one of two broad groups (`Loan Servicing & Payments` or `Non-Servicing Issues`); Level 2 predicts one of four sub-issues within the predicted group. Each level uses a soft-vote ensemble of Logistic Regression and a calibrated LinearSVC. To avoid leakage into the Level 2 training, Level 1 probabilities for the training set are computed via 5-fold out-of-fold cross-validation before being appended as cascade features. A joint confidence score `P(L1) × P(L2)` is computed for every prediction; complaints scoring below 0.45 are flagged for human review. The threshold was selected by sweeping from 0.30 to 0.85 and identifying the operating point that balances auto-labelled Macro F1 against human review rate. An exploratory baseline script (`hierarchical_baseline_experiment.py`) runs grid search and tests alternative groupings; the operational script (`model_evaluation.py`) locks in the final design and produces an evaluation dashboard.
 
@@ -36,7 +36,7 @@ The classifier operates in two cascaded levels. Level 1 predicts one of two broa
 
 ---
 
-## Stage 4 — Application Layer
+## Stage 4: Application Layer
 
 The app is structured around three tabs: an Activity Log for complaint generation and pipeline control, a Results & Analysis dashboard with classification metrics and confusion matrices, and a Human Review Queue for correcting flagged predictions. Synthetic complaints are generated via Groq's `llama-3.3-70b-versatile` model in batches of 10, with few-shot examples drawn from real anonymised narratives as style references. The inference pipeline (`model_pipeline.py`) applies the same `clean_tfidf_text` function used during training to avoid training-serving skew, then runs the full L1 → L2 cascade. Complaints are additionally forced into review if the Level 1 prediction is incorrect, regardless of confidence. Once a reviewer finalises decisions, human-reviewed rows are treated as correct and the Results tab recomputes all metrics accordingly. A session rate limit of 5 runs per hour manages Groq API usage.
 
@@ -66,8 +66,8 @@ The app is structured around three tabs: an Activity Log for complaint generatio
 ### 1. Clone & set up environment
 
 ```bash
-git clone https://github.com/your-username/complaintiq.git
-cd complaintiq
+git clone https://github.com/your-username/complaintflow.git
+cd complaintflow
 ```
 
 **Windows:**

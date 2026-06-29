@@ -1,20 +1,20 @@
-# ComplaintIQ — `app/` Folder README
+# ComplaintFlow — `app/` Folder README
 
 > **AI-powered complaint classification, human-backed.**
 
-This directory contains the full application layer for **ComplaintIQ**, a Streamlit-based dashboard that generates synthetic student loan complaints, classifies them using a pre-trained hierarchical NLP pipeline, and routes low-confidence or incorrect predictions to a human review queue.
+This directory contains the full application layer for **ComplaintFlow**, a Streamlit-based dashboard that generates synthetic student loan complaints, classifies them using a pre-trained hierarchical NLP pipeline, and routes low-confidence or incorrect predictions to a human review queue.
 
 ---
 
 ## Pipeline Overview
 
-![ComplaintIQ Pipeline](complaintiq_pipeline.png)
+![ComplaintFlow Pipeline](complaintflow_pipeline.png)
 
 ---
 
 ## Use Case Diagram
 
-![ComplaintIQ Use Case Diagram](complaintiq_use_case_diagram.png)
+![ComplaintFlow Use Case Diagram](complaintflow_use_case_diagram.png)
 
 ---
 
@@ -27,7 +27,7 @@ app/
 ├── human_review_section.py   # Human Review Queue UI & logic
 ├── complaint_generator.py    # Synthetic complaint generation via Groq API
 ├── train_and_save_models.py  # One-time training script (run before first launch)
-└── complaintiq-badge.svg     # Brand badge displayed in the app header
+└── logo.png                  # Brand badge displayed in the app header
 ```
 
 ---
