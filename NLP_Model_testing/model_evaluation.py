@@ -47,13 +47,28 @@ y_test_issue_broad  = y_test_subissue.map(GROUPING)
 # Configuring StratifiedKFold for consistent cross-validation splits
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
+# C values confirmed via live GridSearchCV in train_and_save_models.py
+# (reproduced identically across 3 separate runs on the same X_train_tfidf.npz).
+# Kept in sync here so evaluation measures the same model that's actually deployed.
+LEVEL1_LR_C = 5.0
+LEVEL1_SVC_C = 1.0
 
-lr_model = LogisticRegression(C=1.0, class_weight='balanced', max_iter=1000, random_state=42)
+# Loan Servicing & Payments: grid search result, used as-is.
+# Non-Servicing Issues: grid search landed on 20.0 (grid edge, plateau ~0.002-0.003
+# F1 gain from 5.0 onward), overridden to 10.0 for lower overfitting risk on this
+# small group (1879 samples). See train_and_save_models.py for the full reasoning.
+LEVEL2_C = {
+    'Loan Servicing & Payments': {'lr': 1.0, 'svc': 0.1},
+    'Non-Servicing Issues':      {'lr': 10.0, 'svc': 10.0},
+}
+
+
+lr_model = LogisticRegression(C=LEVEL1_LR_C, class_weight='balanced', max_iter=1000, random_state=42)
 lr_model.fit(X_train, y_train_issue_broad)
 
 # 2. Calibrated LinearSVC 
 svc_model = CalibratedClassifierCV(
-    LinearSVC(C=1.0, class_weight='balanced', max_iter=1000, random_state=42), 
+    LinearSVC(C=LEVEL1_SVC_C, class_weight='balanced', max_iter=1000, random_state=42), 
     cv=3, 
     method='isotonic'
 )
@@ -68,8 +83,8 @@ avg_proba_broad  = (proba_lr_test + proba_svc_test) / 2.0
 y_pred_broad     = broad_classes[np.argmax(avg_proba_broad, axis=1)]
 level1_confidence = np.max(avg_proba_broad, axis=1)
 # For the training set, we also need the out-of-fold probabilities to use as features for the level 2 sub-issue classifiers
-oof_lr = cross_val_predict(LogisticRegression(C=1.0, class_weight='balanced', max_iter=1000, random_state=42), X_train, y_train_issue_broad, cv=cv, method='predict_proba', n_jobs=-1)
-oof_svc = cross_val_predict(CalibratedClassifierCV(LinearSVC(C=1.0, class_weight='balanced', max_iter=1000, random_state=42), cv=3, method='isotonic'), X_train, y_train_issue_broad, cv=cv, method='predict_proba', n_jobs=-1)
+oof_lr = cross_val_predict(LogisticRegression(C=LEVEL1_LR_C, class_weight='balanced', max_iter=1000, random_state=42), X_train, y_train_issue_broad, cv=cv, method='predict_proba', n_jobs=-1)
+oof_svc = cross_val_predict(CalibratedClassifierCV(LinearSVC(C=LEVEL1_SVC_C, class_weight='balanced', max_iter=1000, random_state=42), cv=3, method='isotonic'), X_train, y_train_issue_broad, cv=cv, method='predict_proba', n_jobs=-1)
 train_broad_proba = (oof_lr + oof_svc) / 2.0
 
 train_df['broad_group'] = y_train_issue_broad.values
@@ -89,10 +104,10 @@ for broad_group in broad_classes:
 
     test_mask = y_pred_broad == broad_group
 
-    lr_sub = LogisticRegression(C=1.0, max_iter=1000, class_weight='balanced', random_state=42)
+    lr_sub = LogisticRegression(C=LEVEL2_C[broad_group]['lr'], max_iter=1000, class_weight='balanced', random_state=42)
     lr_sub.fit(X_train_group, y_train_subgroup)
     
-    svc_sub = CalibratedClassifierCV(LinearSVC(C=1.0, max_iter=1000, class_weight='balanced', random_state=42), cv=3, method='isotonic')
+    svc_sub = CalibratedClassifierCV(LinearSVC(C=LEVEL2_C[broad_group]['svc'], max_iter=1000, class_weight='balanced', random_state=42), cv=3, method='isotonic')
     svc_sub.fit(X_train_group, y_train_subgroup)
 
     if test_mask.sum() > 0:
