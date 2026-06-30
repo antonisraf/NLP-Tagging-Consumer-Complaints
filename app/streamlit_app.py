@@ -8,7 +8,11 @@ import streamlit as st
 import pandas as pd
 
 from complaint_generator import generate_synthetic_complaints
-from model_pipeline import HierarchicalComplaintClassifier, DEFAULT_REJECTION_THRESHOLD
+from model_pipeline import (
+    HierarchicalComplaintClassifier,
+    DEFAULT_REJECTION_THRESHOLD,
+    apply_eval_review_override,
+)
 from human_review_section import render_review_queue
 
 st.set_page_config(page_title="ComplaintFlow", layout="wide")
@@ -914,9 +918,7 @@ with tab_log:
                     results["true_issue"] = list(true_issues); results["true_subissue"] = list(true_subissues)
                     results["issue_correct"] = results["predicted_issue_broad"] == results["true_issue"]
                     results["subissue_correct"] = results["predicted_subissue"] == results["true_subissue"]
-                    if "needs_review" not in results.columns:
-                        results["needs_review"] = False
-                    results["needs_review"] = results["needs_review"] | (~results["issue_correct"])
+                    results = apply_eval_review_override(results)
                     st.session_state.results_df = results
                     st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Done! **{len(results)}** complaints classified. Check the results below."}
                 except Exception as e:

@@ -116,3 +116,30 @@ class HierarchicalComplaintClassifier:
             "joint_confidence": joint_confidence,
             "needs_review": joint_confidence < threshold,
         })
+
+def apply_eval_review_override(results: pd.DataFrame) -> pd.DataFrame:
+    """
+    Evaluation-only routing override.
+
+    In real production use there is no ground-truth label, so `needs_review`
+    is decided purely by `joint_confidence < threshold` inside `predict()`.
+
+    In evaluation/demo contexts (e.g. the Streamlit app, which generates
+    synthetic complaints with a known `true_issue`), we additionally route a
+    complaint to human review whenever the predicted broad issue (L1) is
+    wrong, even if the model was confident. This catches high-confidence L1
+    mistakes that the joint-confidence threshold alone would miss.
+
+    Must be called AFTER `issue_correct` has been computed (i.e. after
+    comparing `predicted_issue_broad` to `true_issue`). Kept separate from
+    `predict()` because `predict()` has no access to ground truth.
+    """
+    if "issue_correct" not in results.columns:
+        raise ValueError(
+            "apply_eval_review_override requires an 'issue_correct' column. "
+            "Compute it first (predicted_issue_broad == true_issue)."
+        )
+
+    out = results.copy()
+    out["needs_review"] = out["needs_review"] | (~out["issue_correct"])
+    return out
