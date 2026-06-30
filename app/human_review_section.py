@@ -4,10 +4,10 @@ import streamlit as st
 DARK_SURFACE  = "#1e293b"
 LIGHT_SURFACE = "#ffffff"
 
-PRIMARY       = "#6366f1"
-PRIMARY_LIGHT = "#818cf8"
+PRIMARY       = "#818cf8"
+PRIMARY_LIGHT = "#6366f1"
 ACCENT        = "#10b981"
-DANGER        = "#ef4444"
+DANGER        = "#dc2626"
 
 ISSUE_SUBISSUE_MAP: dict[str, list[str]] = {
     "Loan Servicing & Payments": [
@@ -103,14 +103,14 @@ def _complaint_card_html(
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <div style="font-size:10px;color:{muted}">
       Model guess:
-      <span style="background:rgba(99,102,241,0.12);color:{PRIMARY_LIGHT};
+      <span style="background:rgba(129,140,248,0.12);color:{PRIMARY};
                    padding:2px 8px;border-radius:4px;font-weight:600;margin-left:4px">
         {model_subissue}
       </span>
     </div>
     <div style="font-size:10px;color:{muted}">
       Confidence:
-      <span style="background:rgba(99,102,241,0.12);color:{PRIMARY_LIGHT};
+      <span style="background:rgba(129,140,248,0.12);color:{PRIMARY};
                    padding:2px 8px;border-radius:4px;font-weight:600;margin-left:4px">
         {conf_pct}%
       </span>
@@ -327,7 +327,7 @@ def _render_finalised_summary(
                 else f"<span style='color:{text}'>{human_subissue}</span>"
             )
             badge = (
-                f"<span style='background:rgba(99,102,241,0.15);color:{PRIMARY};"
+                f"<span style='background:rgba(129,140,248,0.15);color:{PRIMARY};"
                 f"padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600'>Human</span>"
             )
         else:
