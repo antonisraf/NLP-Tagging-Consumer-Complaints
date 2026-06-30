@@ -66,8 +66,8 @@ The app is structured around three tabs: an Activity Log for complaint generatio
 ### 1. Clone & set up environment
 
 ```bash
-git clone https://github.com/your-username/complaintflow.git
-cd complaintflow
+git clone https://github.com/antonisraf/NLP-Tagging-Consumer-Complaints.git
+cd NLP-Tagging-Consumer-Complaints
 ```
 
 **Windows:**
