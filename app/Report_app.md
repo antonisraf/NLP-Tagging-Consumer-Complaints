@@ -1,4 +1,4 @@
-# ComplaintFlow — `app/` Folder README
+# ComplaintFlow `app/` Folder README
 
 > **AI-powered complaint classification, human-backed.**
 
