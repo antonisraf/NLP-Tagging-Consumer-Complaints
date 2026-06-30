@@ -1,32 +1,14 @@
-"""
-Human Review Queue for the hierarchical complaint classifier.
-
-Renders a per-complaint review interface for any row where needs_review=True.
-Saves decisions to st.session_state and applies them back to the results
-DataFrame when the user finalises, updating accuracy metrics accordingly.
-
-Public API:
-    render_review_queue(results_df, dark_mode)
-    apply_review_decisions(results_df)   -> pd.DataFrame
-"""
-
 import pandas as pd
 import streamlit as st
 
-# ── THEME (mirrors app.py's Slate/Indigo palette) ─────────────────────────────
-DARK_SURFACE  = "#1e293b"  # Slate 800
+DARK_SURFACE  = "#1e293b"
 LIGHT_SURFACE = "#ffffff"
 
-PRIMARY       = "#6366f1"  # Indigo 500
-PRIMARY_LIGHT = "#818cf8"  # Indigo 400
-ACCENT        = "#10b981"  # Emerald 500 (Success)
-DANGER        = "#ef4444"  # Red 500
+PRIMARY       = "#6366f1"
+PRIMARY_LIGHT = "#818cf8"
+ACCENT        = "#10b981"
+DANGER        = "#ef4444"
 
-
-# The canonical taxonomy used by the classifier. Confirmed to match the
-# GROUPING dict in train_and_save_models.py and the taxonomy used by
-# complaint_generator.py: 2 broad issues, each with exactly 2 sub-issues
-# (4 sub-issues total, no overlap between groups).
 ISSUE_SUBISSUE_MAP: dict[str, list[str]] = {
     "Loan Servicing & Payments": [
         "Loan Information & Servicing",
@@ -39,26 +21,13 @@ ISSUE_SUBISSUE_MAP: dict[str, list[str]] = {
 }
 
 ALL_ISSUES = list(ISSUE_SUBISSUE_MAP.keys())
-
-# Flattened list of all 4 sub-issues, plus the reverse lookup that derives
-# the broad issue from a chosen sub-issue. Since each sub-issue belongs to
-# exactly one broad issue (strict hierarchy, no overlap), the broad issue
-# never needs to be picked independently, it's fully determined by the
-# sub-issue choice. This lets the review UI show a single dropdown with all
-# 4 sub-issues at once, instead of two cascading dropdowns where picking a
-# broad issue first would only reveal the 2 sub-issues under it.
 ALL_SUBISSUES = [sub for subs in ISSUE_SUBISSUE_MAP.values() for sub in subs]
 SUBISSUE_TO_ISSUE = {
     sub: issue for issue, subs in ISSUE_SUBISSUE_MAP.items() for sub in subs
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Internal helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _ensure_review_state():
-    """Initialise review-related session state keys if they don't exist yet."""
     if "review_decisions" not in st.session_state:
         st.session_state.review_decisions = {}
     if "review_finalised" not in st.session_state:
@@ -150,22 +119,7 @@ def _complaint_card_html(
 </div>"""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Public: apply decisions back to the results DataFrame
-# ─────────────────────────────────────────────────────────────────────────────
-
 def apply_review_decisions(results_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Returns a copy of results_df with three new columns:
-      - reviewed_issue     : human label (or model label if auto-classified)
-      - reviewed_subissue  : human label (or model label if auto-classified)
-      - review_source      : "human" | "model"
-
-    Rows fixed by a human are accepted as-is — the human takes responsibility
-    for them, so we don't score them against the synthetic ground-truth
-    labels. Only rows still resolved by the model keep their original
-    accuracy verdict.
-    """
     df = results_df.copy()
     decisions = st.session_state.get("review_decisions", {})
 
@@ -189,28 +143,16 @@ def apply_review_decisions(results_df: pd.DataFrame) -> pd.DataFrame:
 
     is_human = df["review_source"] == "human"
 
-    # Human-reviewed rows: trust the human, no need to verify against truth.
     df.loc[is_human, "issue_correct"]    = True
     df.loc[is_human, "subissue_correct"] = True
 
-    # Model-only rows: keep scoring against the ground truth as before.
     df.loc[~is_human, "issue_correct"]    = df.loc[~is_human, "reviewed_issue"]    == df.loc[~is_human, "true_issue"]
     df.loc[~is_human, "subissue_correct"] = df.loc[~is_human, "reviewed_subissue"] == df.loc[~is_human, "true_subissue"]
 
     return df
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Public: render the full review queue section
-# ─────────────────────────────────────────────────────────────────────────────
-
 def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
-    """
-    Renders the Human Review Queue section.
-
-    Call this after the Results & Analysis section in app.py, passing the
-    same `results` DataFrame that render_dashboard() receives.
-    """
     _ensure_review_state()
 
     review_rows = results_df[results_df["needs_review"]].copy()
@@ -230,12 +172,10 @@ def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
 </div>""", unsafe_allow_html=True)
         return
 
-    # ── If already finalised, show summary and re-review option ──────────────
     if st.session_state.review_finalised:
         _render_finalised_summary(results_df, review_rows, dark_mode)
         return
 
-    # ── Active review queue ───────────────────────────────────────────────────
     decisions  = st.session_state.review_decisions
     total      = len(review_rows)
     done_count = sum(1 for idx in review_rows.index if idx in decisions)
@@ -273,9 +213,6 @@ def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
 
         col_issue, col_sub, col_btn = st.columns([2, 2, 1])
 
-        # Both dropdowns are fully independent and manually selectable, the
-        # broad issue dropdown shows all 2 options and the sub-issue dropdown
-        # shows all 4 options, with no filtering/auto-derivation between them.
         with col_issue:
             chosen_issue = st.selectbox(
                 "Broad issue",
@@ -285,11 +222,17 @@ def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
                 label_visibility="collapsed",
             )
 
+        available_subissues = ISSUE_SUBISSUE_MAP[chosen_issue]
+
         with col_sub:
+            sub_index = 0
+            if current_subissue in available_subissues:
+                sub_index = available_subissues.index(current_subissue)
+            
             chosen_sub = st.selectbox(
                 "Sub-issue",
-                options=ALL_SUBISSUES,
-                index=ALL_SUBISSUES.index(current_subissue) if current_subissue in ALL_SUBISSUES else 0,
+                options=available_subissues,
+                index=sub_index,
                 key=f"review_sub_{row_idx}",
                 label_visibility="collapsed",
             )
@@ -305,7 +248,6 @@ def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
 
         st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
-    # ── Finalise button ────────────────────────────────────────────────────────
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
     all_done = done_count == total
@@ -338,14 +280,6 @@ def _render_finalised_summary(
     review_rows: pd.DataFrame,
     dark_mode: bool,
 ):
-    """Shown after the user clicks Finalise Reviews.
-
-    No accuracy stats here on purpose. Once a human has reviewed a
-    complaint, they own that call. This shows the FULL final list: every
-    complaint's final issue/sub-issue, whether it came straight from the
-    model or was corrected by a human, with a badge marking the source and
-    the model's original guess shown alongside wherever a human changed it.
-    """
     df_rev    = st.session_state.results_with_review
     decisions = st.session_state.review_decisions
 
@@ -367,9 +301,6 @@ def _render_finalised_summary(
   </span>
 </div>""", unsafe_allow_html=True)
 
-    # Full final list: every complaint's final issue/sub-issue, the
-    # model's own answer where it was trusted, the human's correction
-    # where it wasn't.
     rows_html = ""
     for row_idx, row in df_rev.iterrows():
         snip = row["complaint_text"]
@@ -434,7 +365,6 @@ def _render_finalised_summary(
   </table>
 </div>""", unsafe_allow_html=True)
 
-    # Export + re-review
     col_dl, col_re = st.columns([3, 1])
     with col_dl:
         csv = df_rev.to_csv(index=False).encode("utf-8")
