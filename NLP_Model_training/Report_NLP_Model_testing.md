@@ -35,17 +35,6 @@ For each Level 1 group, a separate Level 2 model is trained on `hstack([TF-IDF f
 * **`hierarchical_baseline_experiment.py`**: The routing confidence is the Level 2 model's own maximum predicted probability (`avg_sub_proba.max(axis=1)`). A single fixed `REJECTION_THRESHOLD = 0.45` is used to split predictions into "auto-labelled" and "sent for review."
 * **`model_evaluation.py`**: The routing confidence is a joint score, `level1_confidence × max(P(Level 2))`. A prediction that is uncertain at Level 1 but confident at Level 2 or vice versa should not be trusted unconditionally; the joint product captures this: both stages must be confident for the overall prediction to be routed as automatic. Using only the Level 2 confidence (as in the baseline) can mask systematic Level 1 errors that compound silently downstream. This score is swept across thresholds from 0.30 to 0.85 in steps of 0.05 to map the full automation/review trade-off curve. The range was chosen to span from near-zero rejection (all complaints auto-labelled) to near-total rejection (only the most certain predictions pass), allowing the inflection point to be identified empirically. The chosen threshold of 0.45 was selected from this sweep as the point where the auto-labelled subset reaches a stable high Macro F1 without requiring an operationally unacceptable human review rate.
 
-### Complexity Scoring (Ambiguity Diagnostic)
-`model_evaluation.py` additionally fits two per-complaint complexity scores, deliberately independent of the classifiers' own `predict_proba` output, to test whether prediction errors correlate with inherent textual ambiguity rather than only with the model's stated confidence:
-
-* **Centroid margin ambiguity**: for each of the four `Subissue_grouped` classes, a mean TF-IDF centroid is computed from the training set. The corpus-wide mean vector (shared vocabulary such as "loan", "payment", "account") is subtracted from each class centroid before normalising, isolating the vocabulary that is actually distinctive per class rather than common across all four. Each test complaint's score is `1 - (cosine similarity to its closest centroid - cosine similarity to its second-closest centroid)`: a high score means the text sits semantically between two sub-issue classes. Mean-centering was necessary because raw (uncentered) class centroids had pairwise cosine similarity as high as 0.95, making the score nearly constant and non-discriminative.
-* **Topic entropy**: a `LatentDirichletAllocation` model (8 topics) is fit on raw token counts of the cleaned training text, with no label information involved. The normalised entropy of each test complaint's topic distribution is used as a second, fully label-independent measure of how topically diffuse the text is.
-
-Both scores are fit once on the training set and reused identically at inference time via `model_pipeline.py` (see [`app/Report_app.md`](../app/Report_app.md)).
-
-**Finding**: after mean-centering, the centroid margin score shows a statistically significant but small correlation with Level 2 correctness (point-biserial r ≈ -0.07, p < 0.0001), and complaints routed to human review score measurably higher on average than auto-labelled ones (Mann-Whitney p ≈ 0.0003). Accuracy declines monotonically from the least- to the most-ambiguous quintile (~69% → ~60%). However, the effect size is modest, and the pairwise centroid similarities show the same class pair driving both this ambiguity score and the bulk of Level 2 confusion: `Loan Information & Servicing` and `Payment & Repayment Issues` are the closest pair in the mean-centered centroid space, and together account for roughly 73% of all Level 2 misclassifications in the confusion matrix. The complexity score is best read as a secondary, model-independent confirmation of that overlap rather than an independent explanation of model failures.
-
-
 * **`hierarchical_baseline_experiment.py`**:
   * Confusion matrix and top confusion-pair table for the Level 1 (4-class) predictions.
   * A second, independent experiment that maps `Issue_grouped` to a 2-class alternative grouping (`GROUPING_ALTERNATIVE`) and trains a fresh Level 1 model (with its own `GridSearchCV`) on that target for comparison.
@@ -56,18 +45,10 @@ Both scores are fit once on the training set and reused identically at inference
     1. Threshold trade-off curve (Auto Subset Macro F1 vs. Human Review %), with the chosen threshold (0.45) marked.
     2. Histogram/KDE of the joint confidence score `P(L1) × P(L2)` across all test predictions, with the threshold marked.
     3. Donut chart showing the auto-labelled vs. human-review split at the chosen threshold.
-  * A second, 2-panel diagnostics plot saved to `plots/complexity_score_diagnostics.png`, covering the centroid margin ambiguity score described above:
-    1. Boxplot of centroid ambiguity split by routing outcome (auto-labelled vs. human review).
-    2. Level 2 error rate by ambiguity quintile, showing the monotonic accuracy decline noted above.
-
-
-
 
 ---
 
 ![NLP Performance Dashboard](../plots/nlp_performance_dashboard.png)
-
-![Complexity Score Diagnostics](../plots/complexity_score_diagnostics.png)
 
 ## 3. Inputs & Outputs
 
@@ -82,6 +63,6 @@ data/tfidf_vectorizer.pkl
 
 ### Outputs
 * `hierarchical_baseline_experiment.py`: console output only (classification reports, confusion matrices, confidence distribution, summary table). No files are saved.
-* `model_evaluation.py`: console output (classification reports, confusion matrices, and complexity score statistics at the chosen threshold) plus `plots/nlp_performance_dashboard.png` and `plots/complexity_score_diagnostics.png`.
+* `model_evaluation.py`: console output (classification reports, confusion matrices) plus `plots/nlp_performance_dashboard.png`.
 
 ---

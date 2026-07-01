@@ -477,20 +477,16 @@ def render_dashboard(results: pd.DataFrame, dark_mode: bool):
         df["review_source"] = "model"
     if "complaint_text" not in df.columns:
         df["complaint_text"] = ""
-    if "complexity_centroid_margin" not in df.columns:
-        df["complexity_centroid_margin"] = float("nan")
 
     cols_needed = [
         "complaint_text", "true_issue", "predicted_issue_broad",
         "issue_correct", "true_subissue", "predicted_subissue",
         "subissue_correct", "joint_confidence", "needs_review", "review_source",
-        "complexity_centroid_margin",
     ]
     df = df[cols_needed].copy()
     df["issue_correct"]    = df["issue_correct"].fillna(False).astype(bool)
     df["subissue_correct"] = df["subissue_correct"].fillna(False).astype(bool)
     df["needs_review"]     = df["needs_review"].fillna(False).astype(bool)
-    df["complexity_centroid_margin"] = df["complexity_centroid_margin"].fillna(0.0).astype(float)
     records_json = df.to_json(orient="records")
     records_b64  = base64.b64encode(records_json.encode("utf-8")).decode("ascii")
 
@@ -610,7 +606,7 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
     <div class="dtbl-wrap" style="margin-top:4px">
       <table class="dtbl" id="dtbl">
         <thead>
-          <tr><th style="width:32px" data-col="idx"># <span class="si" id="si-idx"></span></th><th style="width:200px">Complaint</th><th style="width:60px">Status</th><th data-col="true_issue">True issue <span class="si" id="si-true_issue"></span></th><th data-col="predicted_issue_broad">Pred issue <span class="si" id="si-predicted_issue_broad"></span></th><th style="width:32px" data-col="issue_correct">L1 <span class="si" id="si-issue_correct"></span></th><th data-col="true_subissue">True sub-issue <span class="si" id="si-true_subissue"></span></th><th data-col="predicted_subissue">Pred sub-issue <span class="si" id="si-predicted_subissue"></span></th><th style="width:32px" data-col="subissue_correct">L2 <span class="si" id="si-subissue_correct"></span></th><th style="width:62px" data-col="joint_confidence">Conf <span class="si" id="si-joint_confidence"></span></th><th style="width:82px" data-col="complexity_centroid_margin" title="Secondary diagnostic: how semantically close this complaint's text sits to more than one sub-issue class. Correlates weakly with errors, mostly mirrors the Servicing/Payment confusion already visible in L2.">Ambiguity <span class="si" id="si-complexity_centroid_margin"></span></th></tr>
+          <tr><th style="width:32px" data-col="idx"># <span class="si" id="si-idx"></span></th><th style="width:200px">Complaint</th><th style="width:60px">Status</th><th data-col="true_issue">True issue <span class="si" id="si-true_issue"></span></th><th data-col="predicted_issue_broad">Pred issue <span class="si" id="si-predicted_issue_broad"></span></th><th style="width:32px" data-col="issue_correct">L1 <span class="si" id="si-issue_correct"></span></th><th data-col="true_subissue">True sub-issue <span class="si" id="si-true_subissue"></span></th><th data-col="predicted_subissue">Pred sub-issue <span class="si" id="si-predicted_subissue"></span></th><th style="width:32px" data-col="subissue_correct">L2 <span class="si" id="si-subissue_correct"></span></th><th style="width:62px" data-col="joint_confidence">Conf <span class="si" id="si-joint_confidence"></span></th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -726,7 +722,6 @@ function render(){{
     const sc = r.subissue_correct ? '<span class="match-y">✓</span>' : '<span class="match-n">✗</span>';
     const conf = Math.round(r.joint_confidence * 100);
     const cls = conf >= 80 ? 'c-hi' : conf >= 60 ? 'c-mid' : 'c-lo';
-    const amb = (r.complexity_centroid_margin * 100).toFixed(0);
     return `<tr>
       <td style="font-weight:600">${{r.idx + 1}}</td>
       <td title="${{r.complaint_text}}" style="font-size:12px">${{snip}}</td>
@@ -738,7 +733,6 @@ function render(){{
       <td style="font-size:12px">${{r.predicted_subissue}}</td>
       <td>${{sc}}</td>
       <td><span class="conf-chip ${{cls}}">${{conf}}%</span></td>
-      <td style="font-size:12px;color:var(--muted)">${{amb}}%</td>
     </tr>`;
   }}).join('');
   document.getElementById('detail-empty').style.display = sorted.length ? 'none' : '';
