@@ -1,20 +1,20 @@
-# ComplaintIQ — `app/` Folder README
+# ComplaintFlow `app/` Folder README
 
 > **AI-powered complaint classification, human-backed.**
 
-This directory contains the full application layer for **ComplaintIQ**, a Streamlit-based dashboard that generates synthetic student loan complaints, classifies them using a pre-trained hierarchical NLP pipeline, and routes low-confidence or incorrect predictions to a human review queue.
+This directory contains the full application layer for **ComplaintFlow**, a Streamlit-based dashboard that generates synthetic student loan complaints, classifies them using a pre-trained hierarchical NLP pipeline, and routes low-confidence or incorrect predictions to a human review queue.
 
 ---
 
 ## Pipeline Overview
 
-![ComplaintIQ Pipeline](complaintiq_pipeline.png)
+![ComplaintFlow Pipeline](complaintflow_pipeline.png)
 
 ---
 
 ## Use Case Diagram
 
-![ComplaintIQ Use Case Diagram](complaintiq_use_case_diagram.png)
+![ComplaintFlow Use Case Diagram](complaintflow_use_case_diagram.png)
 
 ---
 
@@ -27,7 +27,7 @@ app/
 ├── human_review_section.py   # Human Review Queue UI & logic
 ├── complaint_generator.py    # Synthetic complaint generation via Groq API
 ├── train_and_save_models.py  # One-time training script (run before first launch)
-└── complaintiq-badge.svg     # Brand badge displayed in the app header
+└── logo.png                  # Brand badge displayed in the app header
 ```
 
 ---
@@ -123,7 +123,8 @@ Returns a list of dicts, each with keys `complaint_text`, `true_issue`, and `tru
 3. Fits a `LogisticRegression` and a calibrated `LinearSVC` for Level 1 (broad issue).
 4. Computes **out-of-fold Level-1 probabilities** via 5-fold cross-validation, which are then appended to the TF-IDF features as cascade inputs to Level-2 models (prevents leakage).
 5. Fits separate LR + calibrated SVC models for each of the two broad groups at Level 2.
-6. Serialises all models, class arrays, and the grouping map into a single `joblib` bundle.
+6. Fits the complexity-scoring artifacts, mean-centered per-class TF-IDF centroids and an 8-topic `LatentDirichletAllocation` model, on the training set only. These power the `complexity_centroid_margin` and `complexity_topic_entropy` columns returned by `model_pipeline.py` (see [`NLP_Model_testing/Report_NLP_Model_testing.md`](../NLP_Model_testing/Report_NLP_Model_testing.md) for methodology and findings).
+7. Serialises all models, class arrays, the grouping map, and the complexity artifacts into a single `joblib` bundle.
 
 **Usage:**
 ```bash

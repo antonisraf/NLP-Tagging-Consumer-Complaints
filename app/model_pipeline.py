@@ -15,6 +15,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from scipy.sparse import hstack, csr_matrix
+from sklearn.preprocessing import normalize
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -52,6 +53,57 @@ class HierarchicalComplaintClassifier:
         self.svc_broad = bundle["svc_broad"]
         self.broad_classes = bundle["broad_classes"]
         self.level2_models = bundle["level2_models"]
+
+        # Complexity scoring artifacts, fit once on the training set in
+        # train_and_save_models.py. Independent of lr_broad/svc_broad/level2
+        # confidence on purpose, see note in that script.
+        self.complexity_centroids = bundle.get("complexity_centroids")
+        self.complexity_count_vectorizer = bundle.get("complexity_count_vectorizer")
+        self.complexity_lda_model = bundle.get("complexity_lda_model")
+
+    def _compute_complexity_scores(self, X_tfidf, cleaned_texts):
+        """
+        Per-complaint complexity, computed independently of the classifier's
+        own predict_proba output:
+
+        - centroid_margin_ambiguity: 1 - (similarity to closest class
+          centroid - similarity to 2nd closest), in TF-IDF cosine space.
+          High = text sits semantically between two sub-issue classes.
+        - topic_entropy: normalized entropy of the LDA topic distribution
+          (fit on raw counts, no labels involved at all). High = text is
+          topically scattered rather than concentrated in one theme.
+
+        Returns two 1-D numpy arrays aligned with the input rows.
+        """
+        n = X_tfidf.shape[0]
+
+        # --- centroid margin ambiguity ---
+        if self.complexity_centroids:
+            classes = list(self.complexity_centroids.keys())
+            centroid_matrix = np.vstack([self.complexity_centroids[c] for c in classes])
+            X_norm = normalize(X_tfidf, norm="l2", axis=1)
+            sims = X_norm.dot(centroid_matrix.T)  # (n_docs, n_classes)
+            sims = np.asarray(sims.todense()) if hasattr(sims, "todense") else np.asarray(sims)
+            sims_sorted = np.sort(sims, axis=1)[:, ::-1]
+            top1 = sims_sorted[:, 0]
+            top2 = sims_sorted[:, 1] if sims_sorted.shape[1] > 1 else np.zeros(n)
+            margin = top1 - top2
+            centroid_margin_ambiguity = 1.0 - margin
+        else:
+            centroid_margin_ambiguity = np.full(n, np.nan)
+
+        # --- LDA topic entropy ---
+        if self.complexity_count_vectorizer is not None and self.complexity_lda_model is not None:
+            X_counts = self.complexity_count_vectorizer.transform(cleaned_texts)
+            topic_dist = self.complexity_lda_model.transform(X_counts)
+            eps = 1e-12
+            raw_entropy = -np.sum(topic_dist * np.log(topic_dist + eps), axis=1)
+            max_entropy = np.log(topic_dist.shape[1])
+            topic_entropy = raw_entropy / max_entropy if max_entropy > 0 else raw_entropy
+        else:
+            topic_entropy = np.full(n, np.nan)
+
+        return centroid_margin_ambiguity, topic_entropy
 
     def predict(self, texts, threshold=DEFAULT_REJECTION_THRESHOLD):
         """
@@ -106,6 +158,8 @@ class HierarchicalComplaintClassifier:
 
         joint_confidence = sub_confidence
 
+        centroid_margin_ambiguity, topic_entropy = self._compute_complexity_scores(X, cleaned)
+
         return pd.DataFrame({
             "complaint_text": texts,
             "cleaned_text": cleaned,
@@ -115,4 +169,33 @@ class HierarchicalComplaintClassifier:
             "subissue_confidence": sub_confidence,
             "joint_confidence": joint_confidence,
             "needs_review": joint_confidence < threshold,
+            "complexity_centroid_margin": centroid_margin_ambiguity,
+            "complexity_topic_entropy": topic_entropy,
         })
+
+def apply_eval_review_override(results: pd.DataFrame) -> pd.DataFrame:
+    """
+    Evaluation-only routing override.
+
+    In real production use there is no ground-truth label, so `needs_review`
+    is decided purely by `joint_confidence < threshold` inside `predict()`.
+
+    In evaluation/demo contexts (e.g. the Streamlit app, which generates
+    synthetic complaints with a known `true_issue`), we additionally route a
+    complaint to human review whenever the predicted broad issue (L1) is
+    wrong, even if the model was confident. This catches high-confidence L1
+    mistakes that the joint-confidence threshold alone would miss.
+
+    Must be called AFTER `issue_correct` has been computed (i.e. after
+    comparing `predicted_issue_broad` to `true_issue`). Kept separate from
+    `predict()` because `predict()` has no access to ground truth.
+    """
+    if "issue_correct" not in results.columns:
+        raise ValueError(
+            "apply_eval_review_override requires an 'issue_correct' column. "
+            "Compute it first (predicted_issue_broad == true_issue)."
+        )
+
+    out = results.copy()
+    out["needs_review"] = out["needs_review"] | (~out["issue_correct"])
+    return out

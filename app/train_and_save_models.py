@@ -31,7 +31,10 @@ from scipy.sparse import load_npz, hstack, csr_matrix
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.model_selection import GridSearchCV, StratifiedKFold, cross_val_predict
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.decomposition import LatentDirichletAllocation
+from sklearn.preprocessing import normalize
 
 warnings.filterwarnings("ignore")
 
@@ -46,6 +49,12 @@ GROUPING = {
     "Payment & Repayment Issues": "Loan Servicing & Payments",
 }
 
+# Defined once, candidate grid reused by Level 1 LR and SVC GridSearchCV calls.
+LEVEL1_C_GRID = [0.1, 1.0, 5.0, 10.0, 20.0]
+
+# Defined once, candidate grid reused by both LR and SVC GridSearchCV calls per group below.
+LEVEL2_C_GRID = [0.1, 1.0, 5.0, 10.0, 20.0]
+
 
 def main():
     print("Loading TF-IDF features and training data...")
@@ -59,32 +68,47 @@ def main():
 
     # ------------------------------------------------------------------
     # Level 1: broad issue (LogisticRegression + calibrated LinearSVC)
+    # Grid-searched, same as Level 2, instead of trusting a single fixed C.
     # ------------------------------------------------------------------
-    print("\n[Level 1] Fitting LogisticRegression and calibrated LinearSVC...")
-    lr_broad = LogisticRegression(
-        C=1.0, class_weight="balanced", max_iter=1000, random_state=42
-    )
-    lr_broad.fit(X_train, y_train_broad)
+    print("\n[Level 1] Grid-searching C for LogisticRegression and calibrated LinearSVC...")
 
-    svc_broad = CalibratedClassifierCV(
-        LinearSVC(C=1.0, class_weight="balanced", max_iter=1000, random_state=42),
-        cv=3,
-        method="isotonic",
+    lr_broad_gs = GridSearchCV(
+        LogisticRegression(class_weight="balanced", max_iter=1000, random_state=42),
+        param_grid={"C": LEVEL1_C_GRID}, cv=cv, scoring="f1_macro", n_jobs=-1,
     )
-    svc_broad.fit(X_train, y_train_broad)
+    lr_broad_gs.fit(X_train, y_train_broad)
+    print(f"   [LR]  Best C: {lr_broad_gs.best_params_['C']}  |  CV Macro F1: {lr_broad_gs.best_score_:.4f}")
+    lr_broad = lr_broad_gs.best_estimator_
+    lr_broad_c = lr_broad_gs.best_params_["C"]
+
+    svc_broad_gs = GridSearchCV(
+        CalibratedClassifierCV(
+            LinearSVC(class_weight="balanced", max_iter=1000, random_state=42),
+            cv=3, method="isotonic",
+        ),
+        param_grid={"estimator__C": LEVEL1_C_GRID}, cv=cv, scoring="f1_macro", n_jobs=-1,
+    )
+    svc_broad_gs.fit(X_train, y_train_broad)
+    print(
+        f"   [SVC] Best C: {svc_broad_gs.best_params_['estimator__C']}  "
+        f"|  CV Macro F1: {svc_broad_gs.best_score_:.4f}"
+    )
+    svc_broad = svc_broad_gs.best_estimator_
+    svc_broad_c = svc_broad_gs.best_params_["estimator__C"]
 
     broad_classes = lr_broad.classes_
     print(f"   Broad classes: {list(broad_classes)}")
 
-    # Out-of-fold broad-issue probabilities, used as cascade features for Level 2
+    # Out-of-fold broad-issue probabilities, used as cascade features for Level 2.
+    # Reuses the C values just found above, instead of refitting another grid search.
     print("\n[Level 1] Computing out-of-fold probabilities for feature cascading...")
     oof_lr = cross_val_predict(
-        LogisticRegression(C=1.0, class_weight="balanced", max_iter=1000, random_state=42),
+        LogisticRegression(C=lr_broad_c, class_weight="balanced", max_iter=1000, random_state=42),
         X_train, y_train_broad, cv=cv, method="predict_proba", n_jobs=-1,
     )
     oof_svc = cross_val_predict(
         CalibratedClassifierCV(
-            LinearSVC(C=1.0, class_weight="balanced", max_iter=1000, random_state=42),
+            LinearSVC(C=svc_broad_c, class_weight="balanced", max_iter=1000, random_state=42),
             cv=3, method="isotonic",
         ),
         X_train, y_train_broad, cv=cv, method="predict_proba", n_jobs=-1,
@@ -98,7 +122,7 @@ def main():
     # Level 2: sub-issue classifiers per broad group, with cascaded
     # broad-issue probabilities appended to the TF-IDF features
     # ------------------------------------------------------------------
-    print("\n[Level 2] Fitting sub-issue classifiers per broad group...")
+    print("\n[Level 2] Grid-searching C and fitting sub-issue classifiers per broad group...")
     level2_models = {}
     for broad_group in broad_classes:
         train_mask = train_df["broad_group"] == broad_group
@@ -110,17 +134,50 @@ def main():
         X_train_group = hstack([X_train_tfidf, broad_proba_sp]).tocsr()
         y_train_subgroup = grp_train_df["Subissue_grouped"]
 
-        lr_sub = LogisticRegression(
-            C=1.0, max_iter=1000, class_weight="balanced", random_state=42
+        print(f"\n---> Group: '{broad_group}' ({X_train_group.shape[0]} samples)")
+
+        lr_sub = GridSearchCV(
+            LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42),
+            param_grid={"C": LEVEL2_C_GRID}, cv=cv, scoring="f1_macro", n_jobs=-1,
         )
         lr_sub.fit(X_train_group, y_train_subgroup)
+        print(f"     [LR]  Best C: {lr_sub.best_params_['C']}  |  CV Macro F1: {lr_sub.best_score_:.4f}")
+        lr_sub = lr_sub.best_estimator_
 
-        svc_sub = CalibratedClassifierCV(
-            LinearSVC(C=1.0, max_iter=1000, class_weight="balanced", random_state=42),
-            cv=3,
-            method="isotonic",
+        min_class_count = y_train_subgroup.value_counts().min()
+        safe_cv = min(3, min_class_count)
+        svc_sub = GridSearchCV(
+            CalibratedClassifierCV(
+                LinearSVC(max_iter=1000, class_weight="balanced", random_state=42),
+                cv=safe_cv, method="isotonic",
+            ),
+            param_grid={"estimator__C": LEVEL2_C_GRID}, cv=cv, scoring="f1_macro", n_jobs=-1,
         )
         svc_sub.fit(X_train_group, y_train_subgroup)
+        print(
+            f"     [SVC] Best C: {svc_sub.best_params_['estimator__C']}  "
+            f"|  CV Macro F1: {svc_sub.best_score_:.4f}"
+        )
+        svc_sub = svc_sub.best_estimator_
+
+        # 'Non-Servicing Issues' is a small group (1879 samples). Its grid search
+        # repeatedly lands on the grid's upper edge (5.0 -> 20.0 -> 75.0 across
+        # widened grids) for marginal CV F1 gains (~0.002-0.003), which is plateau
+        # noise, not real signal. We deliberately override to a less-aggressive
+        # C=10.0 for both models here to reduce overfitting risk on this small
+        # group, rather than chase the grid's edge indefinitely.
+        if broad_group == "Non-Servicing Issues":
+            override_c = 10.0
+            print(f"     [Override] Small group plateau: forcing C={override_c} for LR and SVC.")
+            lr_sub = LogisticRegression(
+                C=override_c, max_iter=1000, class_weight="balanced", random_state=42
+            )
+            lr_sub.fit(X_train_group, y_train_subgroup)
+            svc_sub = CalibratedClassifierCV(
+                LinearSVC(C=override_c, max_iter=1000, class_weight="balanced", random_state=42),
+                cv=safe_cv, method="isotonic",
+            )
+            svc_sub.fit(X_train_group, y_train_subgroup)
 
         level2_models[broad_group] = {
             "lr": lr_sub,
@@ -128,9 +185,50 @@ def main():
             "sub_classes": lr_sub.classes_,
         }
         print(
-            f"   -> '{broad_group}': {X_train_group.shape[0]} samples, "
-            f"classes: {list(lr_sub.classes_)}"
+            f"     -> '{broad_group}': classes: {list(lr_sub.classes_)}"
         )
+
+    # ------------------------------------------------------------------
+    # Complexity scorers (independent of the classifier's own confidence)
+    #
+    # These are fit ONCE on the training set and reused identically at
+    # evaluation/inference time. Neither uses predict_proba from lr_broad/
+    # svc_broad/level2 models, the point is to measure how inherently
+    # ambiguous/mixed a complaint's TEXT is, not how unsure the classifier
+    # happens to be about it. Using the classifier's own confidence for
+    # this would just be circular (low confidence "explaining" low
+    # confidence).
+    # ------------------------------------------------------------------
+    print("\n[Complexity] Fitting class centroids (TF-IDF) for ambiguity scoring...")
+    centroid_classes = sorted(train_df["Subissue_grouped"].unique())
+    X_train_norm = normalize(X_train, norm="l2", axis=1)
+
+    # Global centroid = mean over ALL docs, i.e. the vocabulary shared across
+    # every class (loan, payment, account, call...). Raw class centroids are
+    # dominated by this shared signal (cosine sim between classes ~0.95),
+    # which makes the score nearly constant and useless. Subtracting it
+    # isolates what's actually distinctive per class before computing margin.
+    global_centroid = np.asarray(X_train_norm.mean(axis=0)).ravel()
+
+    centroids = {}
+    for cls in centroid_classes:
+        mask = (train_df["Subissue_grouped"] == cls).values
+        raw_centroid = np.asarray(X_train_norm[mask].mean(axis=0)).ravel()
+        centered = raw_centroid - global_centroid
+        norm_val = np.linalg.norm(centered)
+        centroids[cls] = centered / norm_val if norm_val > 0 else centered
+    print(f"   Centroids fit for {len(centroids)} sub-issue classes (mean-centered).")
+
+    print("\n[Complexity] Fitting LDA topic model (raw counts, label-independent)...")
+    count_vectorizer = CountVectorizer(max_features=5000, min_df=3, max_df=0.95)
+    X_train_counts = count_vectorizer.fit_transform(train_df["cleaned_text"])
+    lda_n_topics = 8
+    lda_model = LatentDirichletAllocation(
+        n_components=lda_n_topics, random_state=42, learning_method="online", n_jobs=-1
+    )
+    lda_model.fit(X_train_counts)
+    print(f"   LDA fit with {lda_n_topics} topics on {X_train_counts.shape[0]} docs.")
+
 
     # ------------------------------------------------------------------
     # Save everything needed for inference
@@ -141,6 +239,9 @@ def main():
         "broad_classes": broad_classes,
         "level2_models": level2_models,
         "grouping": GROUPING,
+        "complexity_centroids": centroids,
+        "complexity_count_vectorizer": count_vectorizer,
+        "complexity_lda_model": lda_model,
     }
 
     out_path = os.path.join(DATA_DIR, "hierarchical_model_bundle.pkl")
