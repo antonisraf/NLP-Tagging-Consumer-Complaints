@@ -9,6 +9,10 @@ from sklearn.svm import LinearSVC
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, cross_val_predict
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.decomposition import LatentDirichletAllocation
+from sklearn.preprocessing import normalize
+from scipy.stats import mannwhitneyu, pointbiserialr
 import joblib
 import warnings
 import matplotlib.pyplot as plt
@@ -120,6 +124,63 @@ for broad_group in broad_classes:
         
         final_subissue_preds[test_mask] = sub_classes[np.argmax(avg_sub_proba, axis=1)]
         final_subissue_confidence[test_mask] = level1_confidence[test_mask] * np.max(avg_sub_proba, axis=1)
+
+# ------------------------------------------------------------------
+# Complexity scoring (independent of the classifiers' own confidence)
+#
+# Fit only on train_df, applied to test_df. Neither score touches
+# predict_proba from lr_model/svc_model/lr_sub/svc_sub, the goal is to
+# measure how inherently ambiguous/mixed the TEXT is, not how unsure the
+# classifier happens to be. Using classifier confidence here would just be
+# circular (low confidence "explaining" low confidence).
+# ------------------------------------------------------------------
+print("\n=== Fitting complexity scorers (centroid margin + LDA topic entropy) ===")
+
+# --- 1. Centroid margin ambiguity (TF-IDF cosine space) ---
+centroid_classes = sorted(train_df['Subissue_grouped'].unique())
+X_train_norm = normalize(X_train, norm='l2', axis=1)
+
+# Global centroid = mean over ALL docs, the vocabulary shared across every
+# class (loan, payment, account, call...). Raw class centroids are dominated
+# by this shared signal (cosine sim between classes was ~0.95, nearly
+# constant score, no discriminative power). Subtracting it isolates what's
+# actually distinctive per class before computing the margin.
+global_centroid = np.asarray(X_train_norm.mean(axis=0)).ravel()
+
+centroids = {}
+for cls in centroid_classes:
+    mask = (train_df['Subissue_grouped'] == cls).values
+    raw_centroid = np.asarray(X_train_norm[mask].mean(axis=0)).ravel()
+    centered = raw_centroid - global_centroid
+    norm_val = np.linalg.norm(centered)
+    centroids[cls] = centered / norm_val if norm_val > 0 else centered
+
+centroid_matrix = np.vstack([centroids[c] for c in centroid_classes])
+X_test_norm = normalize(X_test, norm='l2', axis=1)
+test_sims = np.asarray(X_test_norm.dot(centroid_matrix.T))
+test_sims_sorted = np.sort(test_sims, axis=1)[:, ::-1]
+test_centroid_margin_ambiguity = 1.0 - (test_sims_sorted[:, 0] - test_sims_sorted[:, 1])
+
+# --- 2. LDA topic entropy (raw counts, no labels involved) ---
+count_vectorizer = CountVectorizer(max_features=5000, min_df=3, max_df=0.95)
+X_train_counts = count_vectorizer.fit_transform(train_df['cleaned_text'])
+X_test_counts  = count_vectorizer.transform(test_df['cleaned_text'])
+
+lda_n_topics = 8
+lda_model = LatentDirichletAllocation(n_components=lda_n_topics, random_state=42, learning_method='online', n_jobs=-1)
+lda_model.fit(X_train_counts)
+
+test_topic_dist = lda_model.transform(X_test_counts)
+_eps = 1e-12
+test_raw_entropy = -np.sum(test_topic_dist * np.log(test_topic_dist + _eps), axis=1)
+test_topic_entropy = test_raw_entropy / np.log(lda_n_topics)
+
+test_df = test_df.copy()
+test_df['complexity_centroid_margin'] = test_centroid_margin_ambiguity
+test_df['complexity_topic_entropy']   = test_topic_entropy
+
+print(f"  Centroid margin ambiguity — mean: {test_centroid_margin_ambiguity.mean():.3f}, std: {test_centroid_margin_ambiguity.std():.3f}")
+print(f"  Topic entropy             — mean: {test_topic_entropy.mean():.3f}, std: {test_topic_entropy.std():.3f}")
 
 # Automated evaluation across a range of thresholds to analyze the trade-off between automation and human review
 thresholds = np.arange(0.30, 0.86, 0.05)
@@ -242,3 +303,75 @@ sub_classes_unique = sorted(y_test_subissue.unique())
 cm_l2 = confusion_matrix(y_test_subissue[auto_mask_chosen], final_subissue_preds[auto_mask_chosen], labels=sub_classes_unique)
 df_cm_l2 = pd.DataFrame(cm_l2, index=sub_classes_unique, columns=sub_classes_unique)
 print(df_cm_l2.to_string())
+
+# ------------------------------------------------------------------
+# Complexity score analysis
+#
+# Two separate questions, deliberately kept separate:
+#
+# 1. Does the review queue actually contain harder text? (group comparison
+#    of complexity scores: needs_review vs auto-labelled, at chosen_threshold)
+# 2. Does text complexity predict wrong sub-issue predictions, independent
+#    of whether the classifier flagged it for review? (correlation with
+#    subissue_correct, across the full test set)
+# ------------------------------------------------------------------
+print("\n" + "=" * 60)
+print("Complexity score analysis (independent of classifier confidence)")
+print("=" * 60)
+
+subissue_correct = (final_subissue_preds == y_test_subissue.values)
+needs_review_chosen = ~auto_mask_chosen
+
+for score_name in ['complexity_centroid_margin', 'complexity_topic_entropy']:
+    scores = test_df[score_name].values
+
+    review_scores = scores[needs_review_chosen]
+    auto_scores   = scores[auto_mask_chosen]
+    u_stat, p_value = mannwhitneyu(review_scores, auto_scores, alternative='greater')
+
+    corr, corr_p = pointbiserialr(subissue_correct.astype(int), scores)
+
+    print(f"\n--- {score_name} ---")
+    print(f"  Mean (human review group): {review_scores.mean():.3f}")
+    print(f"  Mean (auto-labelled group): {auto_scores.mean():.3f}")
+    print(f"  Mann-Whitney U (review > auto): p = {p_value:.4g}")
+    print(f"  Point-biserial correlation with subissue_correct: r = {corr:.3f} (p = {corr_p:.4g})")
+
+# Plot: complexity score distributions by review status, and error rate by decile
+fig2, axes2 = plt.subplots(1, 2, figsize=(13, 5.5))
+fig2.suptitle('Complexity Score Diagnostics (Independent of Classifier Confidence)',
+              fontsize=14, weight='bold', color='#111111', y=0.98)
+
+score_to_plot = 'complexity_centroid_margin'
+
+ax_box = axes2[0]
+box_data = pd.DataFrame({
+    score_to_plot: test_df[score_to_plot].values,
+    'Routed to': np.where(needs_review_chosen, 'Human Review', 'Auto-labelled'),
+})
+sns.boxplot(data=box_data, x='Routed to', y=score_to_plot, ax=ax_box,
+            palette=[PRIMARY_COLOR, SECONDARY_COLOR])
+ax_box.set_title('Centroid Ambiguity by Routing Outcome', fontsize=12, weight='bold', pad=12)
+ax_box.set_ylabel('Centroid Margin Ambiguity (higher = more ambiguous)', labelpad=10)
+ax_box.set_xlabel('')
+ax_box.grid(True, linestyle='--', alpha=0.5)
+
+ax_err = axes2[1]
+decile_labels = pd.qcut(test_df[score_to_plot], q=5, duplicates='drop')
+err_by_decile = pd.DataFrame({
+    'decile': decile_labels,
+    'correct': subissue_correct,
+}).groupby('decile', observed=True)['correct'].agg(['mean', 'count'])
+err_rate = 1 - err_by_decile['mean']
+ax_err.bar(range(len(err_rate)), err_rate.values, color=PRIMARY_COLOR, alpha=0.8)
+ax_err.set_xticks(range(len(err_rate)))
+ax_err.set_xticklabels([f"Q{i+1}" for i in range(len(err_rate))])
+ax_err.set_title('Sub-issue Error Rate by Ambiguity Quintile', fontsize=12, weight='bold', pad=12)
+ax_err.set_xlabel('Centroid Ambiguity Quintile (Q1=lowest, Q5=highest)', labelpad=10)
+ax_err.set_ylabel('Error Rate', labelpad=10)
+ax_err.grid(True, linestyle='--', alpha=0.5)
+
+plt.subplots_adjust(left=0.07, right=0.96, wspace=0.3, top=0.85, bottom=0.12)
+plt.savefig('plots/complexity_score_diagnostics.png', dpi=300, bbox_inches='tight')
+plt.close()
+print("\nSaved complexity diagnostics plot to: plots/complexity_score_diagnostics.png")
