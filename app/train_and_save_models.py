@@ -32,6 +32,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, cross_val_predict
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.decomposition import LatentDirichletAllocation
+from sklearn.preprocessing import normalize
 
 warnings.filterwarnings("ignore")
 
@@ -186,6 +189,48 @@ def main():
         )
 
     # ------------------------------------------------------------------
+    # Complexity scorers (independent of the classifier's own confidence)
+    #
+    # These are fit ONCE on the training set and reused identically at
+    # evaluation/inference time. Neither uses predict_proba from lr_broad/
+    # svc_broad/level2 models, the point is to measure how inherently
+    # ambiguous/mixed a complaint's TEXT is, not how unsure the classifier
+    # happens to be about it. Using the classifier's own confidence for
+    # this would just be circular (low confidence "explaining" low
+    # confidence).
+    # ------------------------------------------------------------------
+    print("\n[Complexity] Fitting class centroids (TF-IDF) for ambiguity scoring...")
+    centroid_classes = sorted(train_df["Subissue_grouped"].unique())
+    X_train_norm = normalize(X_train, norm="l2", axis=1)
+
+    # Global centroid = mean over ALL docs, i.e. the vocabulary shared across
+    # every class (loan, payment, account, call...). Raw class centroids are
+    # dominated by this shared signal (cosine sim between classes ~0.95),
+    # which makes the score nearly constant and useless. Subtracting it
+    # isolates what's actually distinctive per class before computing margin.
+    global_centroid = np.asarray(X_train_norm.mean(axis=0)).ravel()
+
+    centroids = {}
+    for cls in centroid_classes:
+        mask = (train_df["Subissue_grouped"] == cls).values
+        raw_centroid = np.asarray(X_train_norm[mask].mean(axis=0)).ravel()
+        centered = raw_centroid - global_centroid
+        norm_val = np.linalg.norm(centered)
+        centroids[cls] = centered / norm_val if norm_val > 0 else centered
+    print(f"   Centroids fit for {len(centroids)} sub-issue classes (mean-centered).")
+
+    print("\n[Complexity] Fitting LDA topic model (raw counts, label-independent)...")
+    count_vectorizer = CountVectorizer(max_features=5000, min_df=3, max_df=0.95)
+    X_train_counts = count_vectorizer.fit_transform(train_df["cleaned_text"])
+    lda_n_topics = 8
+    lda_model = LatentDirichletAllocation(
+        n_components=lda_n_topics, random_state=42, learning_method="online", n_jobs=-1
+    )
+    lda_model.fit(X_train_counts)
+    print(f"   LDA fit with {lda_n_topics} topics on {X_train_counts.shape[0]} docs.")
+
+
+    # ------------------------------------------------------------------
     # Save everything needed for inference
     # ------------------------------------------------------------------
     bundle = {
@@ -194,6 +239,9 @@ def main():
         "broad_classes": broad_classes,
         "level2_models": level2_models,
         "grouping": GROUPING,
+        "complexity_centroids": centroids,
+        "complexity_count_vectorizer": count_vectorizer,
+        "complexity_lda_model": lda_model,
     }
 
     out_path = os.path.join(DATA_DIR, "hierarchical_model_bundle.pkl")
