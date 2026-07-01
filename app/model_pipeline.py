@@ -126,8 +126,8 @@ def apply_eval_review_override(results: pd.DataFrame) -> pd.DataFrame:
 
     In evaluation/demo contexts (e.g. the Streamlit app, which generates
     synthetic complaints with a known `true_issue`), we additionally route a
-    complaint to human review whenever the predicted broad issue (L1) is
-    wrong, even if the model was confident. This catches high-confidence L1
+    complaint to human review whenever the predicted broad issue (Level 1) is
+    wrong, even if the model was confident. This catches high-confidence Level  1
     mistakes that the joint-confidence threshold alone would miss.
 
     Must be called AFTER `issue_correct` has been computed (i.e. after

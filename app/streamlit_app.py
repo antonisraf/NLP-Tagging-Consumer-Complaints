@@ -573,8 +573,8 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
     <div class="metric"><div class="metric-label">Total</div><div class="metric-value" id="m-total">0</div><div class="metric-sub" id="m-total-sub"></div></div>
     <div class="metric"><div class="metric-label">Auto-Labelled</div><div class="metric-value" id="m-auto">0</div><div class="metric-sub" id="m-auto-pct"></div></div>
     <div class="metric"><div class="metric-label">Needs Review</div><div class="metric-value" id="m-review">0</div><div class="metric-sub" id="m-review-pct"></div></div>
-    <div class="metric"><div class="metric-label">L1 Accuracy</div><div class="metric-value" id="m-l1">0%</div><div class="metric-sub">all complaints</div></div>
-    <div class="metric"><div class="metric-label">L2 Accuracy</div><div class="metric-value" id="m-l2">0%</div><div class="metric-sub">all complaints</div></div>
+    <div class="metric"><div class="metric-label">Level 1 Accuracy</div><div class="metric-value" id="m-l1">0%</div><div class="metric-sub">all complaints</div></div>
+    <div class="metric"><div class="metric-label">Level 2 Accuracy</div><div class="metric-value" id="m-l2">0%</div><div class="metric-sub">all complaints</div></div>
   </div>
 
   <div class="tabs">
@@ -590,8 +590,8 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
       <div class="card"><div class="card-title">Routing Split</div><div class="chart-wrap" style="height:160px"><canvas id="routeChart"></canvas></div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div class="card"><div class="card-title">L1 accuracy by broad issue</div><div id="l1-cat"></div></div>
-      <div class="card"><div class="card-title">L2 accuracy by sub-issue</div><div id="l2-cat"></div></div>
+      <div class="card"><div class="card-title">Level 1 accuracy by broad issue</div><div id="l1-cat"></div></div>
+      <div class="card"><div class="card-title">Level 2 accuracy by sub-issue</div><div id="l2-cat"></div></div>
     </div>
   </div>
 
@@ -606,7 +606,7 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
     <div class="dtbl-wrap" style="margin-top:4px">
       <table class="dtbl" id="dtbl">
         <thead>
-          <tr><th style="width:32px" data-col="idx"># <span class="si" id="si-idx"></span></th><th style="width:200px">Complaint</th><th style="width:60px">Status</th><th data-col="true_issue">True issue <span class="si" id="si-true_issue"></span></th><th data-col="predicted_issue_broad">Pred issue <span class="si" id="si-predicted_issue_broad"></span></th><th style="width:32px" data-col="issue_correct">L1 <span class="si" id="si-issue_correct"></span></th><th data-col="true_subissue">True sub-issue <span class="si" id="si-true_subissue"></span></th><th data-col="predicted_subissue">Pred sub-issue <span class="si" id="si-predicted_subissue"></span></th><th style="width:32px" data-col="subissue_correct">L2 <span class="si" id="si-subissue_correct"></span></th><th style="width:62px" data-col="joint_confidence">Conf <span class="si" id="si-joint_confidence"></span></th></tr>
+          <tr><th style="width:32px" data-col="idx"># <span class="si" id="si-idx"></span></th><th style="width:200px">Complaint</th><th style="width:60px">Status</th><th data-col="true_issue">True issue <span class="si" id="si-true_issue"></span></th><th data-col="predicted_issue_broad">Pred issue <span class="si" id="si-predicted_issue_broad"></span></th><th style="width:32px" data-col="issue_correct">Level 1 <span class="si" id="si-issue_correct"></span></th><th data-col="true_subissue">True sub-issue <span class="si" id="si-true_subissue"></span></th><th data-col="predicted_subissue">Pred sub-issue <span class="si" id="si-predicted_subissue"></span></th><th style="width:32px" data-col="subissue_correct">Level 2 <span class="si" id="si-subissue_correct"></span></th><th style="width:62px" data-col="joint_confidence">Conf <span class="si" id="si-joint_confidence"></span></th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -662,10 +662,10 @@ function render(){{
   }}
 
   document.getElementById('acc-bars').innerHTML = 
-    barRow('L1 correct', l1Acc, 'var(--primary)') + 
-    barRow('L1 incorrect', 1 - l1Acc, 'var(--danger)') +
-    barRow('L2 correct', l2Acc, 'var(--primary)') +
-    barRow('L2 incorrect', 1 - l2Acc, 'var(--danger)');
+    barRow('Level 1 correct', l1Acc, 'var(--primary)') + 
+    barRow('Level 1 incorrect', 1 - l1Acc, 'var(--danger)') +
+    barRow('Level 2 correct', l2Acc, 'var(--primary)') +
+    barRow('Level 2 incorrect', 1 - l2Acc, 'var(--danger)');
 
   const bins = new Array(10).fill(0);
   data.forEach(r => {{ const b = Math.min(9, Math.floor(r.joint_confidence * 10)); bins[b]++; }});
