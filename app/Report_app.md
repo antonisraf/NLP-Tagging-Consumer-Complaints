@@ -123,8 +123,7 @@ Returns a list of dicts, each with keys `complaint_text`, `true_issue`, and `tru
 3. Fits a `LogisticRegression` and a calibrated `LinearSVC` for Level 1 (broad issue).
 4. Computes **out-of-fold Level-1 probabilities** via 5-fold cross-validation, which are then appended to the TF-IDF features as cascade inputs to Level-2 models (prevents leakage).
 5. Fits separate LR + calibrated SVC models for each of the two broad groups at Level 2.
-6. Fits the complexity-scoring artifacts, mean-centered per-class TF-IDF centroids and an 8-topic `LatentDirichletAllocation` model, on the training set only. These power the `complexity_centroid_margin` and `complexity_topic_entropy` columns returned by `model_pipeline.py` (see [`NLP_Model_testing/Report_NLP_Model_testing.md`](../NLP_Model_testing/Report_NLP_Model_testing.md) for methodology and findings).
-7. Serialises all models, class arrays, the grouping map, and the complexity artifacts into a single `joblib` bundle.
+6. Serialises all models, class arrays, and the grouping map into a single `joblib` bundle.
 
 **Usage:**
 ```bash
