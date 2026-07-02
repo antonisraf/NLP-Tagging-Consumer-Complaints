@@ -71,7 +71,45 @@ Runs the full cascade:
 3. **Level 2 (sub-issue):** For each broad group, runs a separate pair of (LR + SVC) models whose feature matrix includes the Level-1 probability vector appended to the TF-IDF features (feature cascading). Predicts one of four sub-issues.
 4. **Joint confidence** = Level-1 confidence × Level-2 confidence. Rows with joint confidence below `threshold` (default `0.45`) are flagged `needs_review = True`.
 
-Returns a `pd.DataFrame` with columns: `complaint_text`, `cleaned_text`, `predicted_issue_broad`, `issue_confidence`, `predicted_subissue`, `subissue_confidence`, `joint_confidence`, `needs_review`.
+Returns a `pd.DataFrame` with columns: `complaint_text`, `cleaned_text`, `predicted_issue_broad`, `issue_confidence`, `predicted_subissue`, `subissue_confidence`, `joint_confidence`, `needs_review`, `joint_perplexity`.
+
+**Joint Perplexity**
+
+In addition to `joint_confidence`, `predict()` computes a Joint Perplexity score in the same inference pass, no extra model calls required. It measures the combined uncertainty of the pipeline across both levels, computed directly from the average probability distributions:
+
+Joint Perplexity = e^(H(L1) + H(L2))
+
+Where the entropy H for a probability distribution P is:
+
+H(P) = −Σᵢ Pᵢ · log(Pᵢ + ε)
+
+with ε = 10⁻¹⁰ added for numerical stability, to prevent log(0) errors.
+
+Interpretation:
+
+| Value | Meaning |
+|---|---|
+| ≈ 1.0 | Absolute certainty. The model assigned ~100% probability to a single broad issue and a single sub-issue. Text is clear and unambiguous. |
+| ≈ 2.0 | Low/medium uncertainty. The model's confusion is equivalent to choosing between 2 equally likely scenarios. |
+| ≥ 3.0 | High uncertainty. The model is split across 3 or more overlapping outcomes, typically complex, multi-topic, or poorly written complaints that likely require Human Review. |
+
+Exposed in the Streamlit dashboard so reviewers can filter and prioritise the hardest cases, separately from the `needs_review` threshold flag.
+
+**Known limitation — blind spot on near-duplicate categories**
+
+Validated on the real labelled test set (not synthetic data), joint perplexity separates correct from incorrect predictions with an overall AUC-ROC of **0.648** (point-biserial r = 0.228). Breaking this down by error type shows the signal is not uniform:
+
+| Error type | n | Mean perplexity | AUC vs. correct |
+|---|---|---|---|
+| Correct predictions | 2492 | 2.164 | — |
+| `Loan Information & Servicing` ↔ `Payment & Repayment Issues` confusion | 911 | 2.292 | **0.601** |
+| All other errors | 417 | 2.741 | **0.751** |
+
+`Loan Information & Servicing` and `Payment & Repayment Issues` are near-duplicate categories that share vocabulary. This single pair accounts for roughly two-thirds of all sub-issue errors, and it is exactly where joint perplexity performs weakest (AUC 0.601, barely above chance). The model tends to be **confidently wrong** here rather than genuinely uncertain: the predicted probability distribution is sharp, just pointed at the wrong class, so entropy stays low even though the prediction is wrong.
+
+By contrast, on rarer or more unusual errors outside this pair, perplexity works well (AUC 0.751) and is a reasonable uncertainty signal.
+
+**Implication:** joint perplexity should not be used as the sole or primary routing signal for human review. It is a useful secondary diagnostic for surfacing atypical or multi-topic complaints, but it should not be trusted to catch the dominant Info/Payment confusion, which is currently still routed through the same joint-confidence threshold as everything else. No separate handling for this pair exists in the pipeline today.
 
 ---
 
