@@ -554,10 +554,10 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
 .b-human{{background:rgba(99,102,241,0.15);color:var(--primary)}}
 .match-y{{color:var(--accent);font-weight:700}}.match-n{{color:var(--danger);font-weight:700}}
 .conf-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px}}
+.perp-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px;background:rgba(148,163,184,0.12);color:var(--muted)}}
 .c-hi{{background:rgba(16,185,129,0.15);color:var(--accent)}}
 .c-mid{{background:rgba(99,102,241,0.15);color:var(--primary)}}
 .c-lo{{background:rgba(239,68,68,0.15);color:var(--danger)}}
-.perp-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px;background:rgba(148,163,184,0.12);color:var(--muted)}}
 .si{{font-size:11px;margin-left:4px;opacity:0.3}}.si.on{{opacity:1;color:var(--primary)}}
 </style>
 </head>
@@ -710,6 +710,16 @@ function render(){{
     return `<tr><td>${{s}}</td><td>${{gt}}</td><td>${{pr}}</td><td style="color:${{col}};font-weight:600">${{d > 0 ? '+' : ''}}${{d}}</td></tr>`;
   }}).join('') || '<tr><td colspan="4" style="color:var(--muted);padding:10px">No data.</td></tr>';
 
+  const perpVals = data.map(r => r.joint_perplexity).filter(v => v != null).sort((a, b) => a - b);
+  const quantile = (arr, q) => {{
+    if(!arr.length) return null;
+    const pos = (arr.length - 1) * q;
+    const base = Math.floor(pos), rest = pos - base;
+    return arr[base + 1] !== undefined ? arr[base] + rest * (arr[base + 1] - arr[base]) : arr[base];
+  }};
+  const perpLo = quantile(perpVals, 1/3);
+  const perpHi = quantile(perpVals, 2/3);
+
   const sorted = [...data].sort((a, b) => {{
     let av = sortCol === 'idx' ? a.idx : a[sortCol];
     let bv = sortCol === 'idx' ? b.idx : b[sortCol];
@@ -728,6 +738,10 @@ function render(){{
     const conf = Math.round(r.joint_confidence * 100);
     const cls = conf >= 80 ? 'c-hi' : conf >= 60 ? 'c-mid' : 'c-lo';
     const perp = r.joint_perplexity != null ? r.joint_perplexity.toFixed(2) : '--';
+    const perpCls = r.joint_perplexity == null || perpLo == null ? ''
+      : r.joint_perplexity <= perpLo ? 'c-hi'
+      : r.joint_perplexity <= perpHi ? 'c-mid'
+      : 'c-lo';
     return `<tr>
       <td style="font-weight:600">${{r.idx + 1}}</td>
       <td title="${{r.complaint_text}}" style="font-size:12px">${{snip}}</td>
@@ -739,7 +753,7 @@ function render(){{
       <td style="font-size:12px">${{r.predicted_subissue}}</td>
       <td>${{sc}}</td>
       <td><span class="conf-chip ${{cls}}">${{conf}}%</span></td>
-      <td><span class="perp-chip">${{perp}}</span></td>
+      <td><span class="perp-chip ${{perpCls}}" title="Bottom third of this batch's perplexity = certain · middle third = moderate · top third = high uncertainty">${{perp}}</span></td>
     </tr>`;
   }}).join('');
   document.getElementById('detail-empty').style.display = sorted.length ? 'none' : '';
