@@ -546,6 +546,7 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
 .dtbl th{{text-align:left;padding:12px 8px;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;cursor:pointer;font-weight:600;white-space:nowrap}}
 .dtbl th:hover{{color:var(--text)}}
 .dtbl td{{padding:10px 8px;border-bottom:1px solid var(--border);vertical-align:top}}
+.dtbl th:nth-child(10),.dtbl td:nth-child(10),.dtbl th:nth-child(11),.dtbl td:nth-child(11){{text-align:center}}
 .dtbl tr:hover{{background:rgba(255,255,255,0.02)}}
 
 .badge{{padding:3px 9px;border-radius:4px;font-size:12px;font-weight:600}}
@@ -553,8 +554,8 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
 .b-review{{background:rgba(239,68,68,0.1);color:var(--danger)}}
 .b-human{{background:rgba(99,102,241,0.15);color:var(--primary)}}
 .match-y{{color:var(--accent);font-weight:700}}.match-n{{color:var(--danger);font-weight:700}}
-.conf-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px}}
-.perp-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px;background:rgba(148,163,184,0.12);color:var(--muted)}}
+.conf-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px;display:inline-block;min-width:34px;text-align:center;white-space:nowrap}}
+.perp-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px;background:rgba(148,163,184,0.12);color:var(--muted);display:inline-block;min-width:34px;text-align:center;white-space:nowrap}}
 .c-hi{{background:rgba(16,185,129,0.15);color:var(--accent)}}
 .c-mid{{background:rgba(99,102,241,0.15);color:var(--primary)}}
 .c-lo{{background:rgba(239,68,68,0.15);color:var(--danger)}}
