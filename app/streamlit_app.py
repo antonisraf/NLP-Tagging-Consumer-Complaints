@@ -31,6 +31,7 @@ defaults = {
     "review_decisions":    {},
     "review_finalised":    False,
     "results_with_review": None,
+    "nav_section":         "About",
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -135,6 +136,33 @@ div.stButton > button {{
 div.stButton > button:hover {{
     border-color: var(--primary) !important;
     color: var(--primary) !important;
+}}
+
+[data-testid="stSidebar"] div.stButton > button {{
+    display: flex !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)) !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 10px rgba(0,0,0,0.18);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    letter-spacing: 0.01em;
+}}
+[data-testid="stSidebar"] div.stButton > button:hover {{
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, rgba(129,140,248,0.14), rgba(255,255,255,0.02)) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 6px 16px rgba(0,0,0,0.28);
+}}
+[data-testid="stSidebar"] div.stButton > button[kind="primary"] {{
+    background: linear-gradient(135deg, var(--primary), var(--primary-hover)) !important;
+    border: 1px solid rgba(255,255,255,0.18) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 6px 20px rgba(129,140,248,0.35) !important;
+}}
+[data-testid="stSidebar"] div.stButton > button[kind="primary"]:hover {{
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, var(--primary-hover), var(--primary)) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 8px 24px rgba(129,140,248,0.45) !important;
 }}
 
 div[data-baseweb="slider"] [role="slider"] {{
@@ -785,6 +813,32 @@ def _badge_html() -> str:
 
 # ── FULL APP ──────────────────────────────────────────────────────────────────
 with st.sidebar:
+    st.markdown("""
+<div style="display:flex;align-items:center;gap:10px;padding:2px 2px 20px 2px">
+  <div style="width:34px;height:34px;border-radius:9px;flex-shrink:0;
+              background:linear-gradient(135deg,var(--primary),var(--primary-hover));
+              display:flex;align-items:center;justify-content:center;font-weight:800;
+              color:#fff;font-size:14px;box-shadow:0 4px 14px rgba(129,140,248,0.35)">CF</div>
+  <div>
+    <div style="font-weight:700;font-size:0.92rem;letter-spacing:-0.01em">ComplaintFlow</div>
+    <div style="font-size:0.68rem;color:var(--muted)">NLP Complaint Classifier</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    icons = {"About": "◇", "Demo": "▷", "App": "⚙"}
+    for label in ["About", "Demo", "App"]:
+        is_active = st.session_state.nav_section == label
+        if st.button(
+            f"{icons[label]}   {label}",
+            key=f"nav_{label}",
+            type="primary" if is_active else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.nav_section = label
+            st.rerun()
+
+    st.divider()
     st.markdown("**System Status**")
     if os.path.exists(HOLDOUT_DATA_PATH):
         st.success("Held-out data found")
@@ -808,95 +862,130 @@ with st.sidebar:
             use_container_width=True,
         )
 
-st.markdown(_badge_html(), unsafe_allow_html=True)
+    st.markdown("""
+<div style="margin-top:3rem;padding-top:14px;border-top:1px solid var(--border);
+            text-align:center;color:var(--muted);font-size:0.7rem;letter-spacing:0.03em">
+  ComplaintFlow · v1.0
+</div>
+""", unsafe_allow_html=True)
 
-# ── TABS ──────────────────────────────────────────────────────────────────────
-tab_log, tab_results, tab_review = st.tabs(["Activity Log", "Results & Analysis", "Human Review Queue"])
+def render_app_tabs():
+    st.markdown(_badge_html(), unsafe_allow_html=True)
 
-with tab_log:
-    chat_col, ctrl_col = st.columns([5, 1])
+    # ── TABS ──────────────────────────────────────────────────────────────────────
+    tab_log, tab_results, tab_review = st.tabs(["Activity Log", "Results & Analysis", "Human Review Queue"])
 
-    with ctrl_col:
-        st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
-        n_complaints = st.slider("Number of complaints", min_value=10, max_value=30, value=20, step=1)
-        threshold = st.slider("Joint Confidence Threshold", 0.0, 1.0, DEFAULT_REJECTION_THRESHOLD, 0.01)
-        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-        generate_clicked = st.button("Load & Classify", type="primary", use_container_width=True)
+    with tab_log:
+        chat_col, ctrl_col = st.columns([5, 1])
 
-    with chat_col:
-        render_chat("400px")
+        with ctrl_col:
+            st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
+            n_complaints = st.slider("Number of complaints", min_value=10, max_value=30, value=20, step=1)
+            threshold = st.slider("Joint Confidence Threshold", 0.0, 1.0, DEFAULT_REJECTION_THRESHOLD, 0.01)
+            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+            generate_clicked = st.button("Load & Classify", type="primary", use_container_width=True)
 
-        if generate_clicked:
-            user_msg = f"Classify {n_complaints} student loan complaints, threshold {threshold:.2f}"
-            st.session_state.chat_messages = [{"role": "user", "content": user_msg}, {"role": "assistant", "content": "Processing pipeline..."}]
-            st.session_state.review_decisions = {}; st.session_state.review_finalised = False; st.session_state.results_with_review = None
+        with chat_col:
+            render_chat("400px")
 
-            with st.spinner("Running pipeline..."):
-                try:
-                    records = load_real_complaints(HOLDOUT_DATA_PATH, n=n_complaints, random_state=None)
+            if generate_clicked:
+                user_msg = f"Classify {n_complaints} student loan complaints, threshold {threshold:.2f}"
+                st.session_state.chat_messages = [{"role": "user", "content": user_msg}, {"role": "assistant", "content": "Processing pipeline..."}]
+                st.session_state.review_decisions = {}; st.session_state.review_finalised = False; st.session_state.results_with_review = None
 
-                    complaint_texts, true_issues, true_subissues = [], [], []
-                    for r in records:
-                        if isinstance(r, dict):
-                            complaint_texts.append(r.get("complaint_text", "").strip())
-                            true_issues.append(r.get("true_issue", "Unknown"))
-                            true_subissues.append(r.get("true_subissue", "Unknown"))
-                        else:
-                            complaint_texts.append(str(r).strip()); true_issues.append("Unknown"); true_subissues.append("Unknown")
+                with st.spinner("Running pipeline..."):
+                    try:
+                        records = load_real_complaints(HOLDOUT_DATA_PATH, n=n_complaints, random_state=None)
 
-                    valid = [(t, i, s) for t, i, s in zip(complaint_texts, true_issues, true_subissues) if t]
-                    if not valid:
-                        st.session_state.chat_messages[-1] = {"role": "assistant", "content": "All complaint texts were empty."}; st.rerun()
+                        complaint_texts, true_issues, true_subissues = [], [], []
+                        for r in records:
+                            if isinstance(r, dict):
+                                complaint_texts.append(r.get("complaint_text", "").strip())
+                                true_issues.append(r.get("true_issue", "Unknown"))
+                                true_subissues.append(r.get("true_subissue", "Unknown"))
+                            else:
+                                complaint_texts.append(str(r).strip()); true_issues.append("Unknown"); true_subissues.append("Unknown")
 
-                    complaint_texts, true_issues, true_subissues = zip(*valid)
-                    clf = load_classifier()
-                    results = clf.predict(list(complaint_texts), threshold=threshold)
-                    results["true_issue"] = list(true_issues); results["true_subissue"] = list(true_subissues)
-                    results["issue_correct"] = results["predicted_issue_broad"] == results["true_issue"]
-                    results["subissue_correct"] = results["predicted_subissue"] == results["true_subissue"]
-                    results = apply_eval_review_override(results)
-                    # Also flag rows for review when the sub-issue (Level 2) prediction is
-                    # wrong, even if Level 1 was correct. apply_eval_review_override only
-                    # forces review on Level 1 mistakes by design (see model_pipeline.py);
-                    # this extends that behaviour without touching that file.
-                    results["needs_review"] = results["needs_review"] | (~results["subissue_correct"])
-                    st.session_state.results_df = results
-                    st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Loaded {n_complaints} real held-out complaints. **{len(results)}** classified. Check the results below."}
-                except (FileNotFoundError, ValueError) as e:
-                    st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Could not load held-out data: {e}"}
-                except Exception as e:
-                    st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Pipeline failed: {e}"}
-            st.rerun()
+                        valid = [(t, i, s) for t, i, s in zip(complaint_texts, true_issues, true_subissues) if t]
+                        if not valid:
+                            st.session_state.chat_messages[-1] = {"role": "assistant", "content": "All complaint texts were empty."}; st.rerun()
 
-with tab_results:
-    if st.session_state.results_df is not None:
-        results = st.session_state.results_df
+                        complaint_texts, true_issues, true_subissues = zip(*valid)
+                        clf = load_classifier()
+                        results = clf.predict(list(complaint_texts), threshold=threshold)
+                        results["true_issue"] = list(true_issues); results["true_subissue"] = list(true_subissues)
+                        results["issue_correct"] = results["predicted_issue_broad"] == results["true_issue"]
+                        results["subissue_correct"] = results["predicted_subissue"] == results["true_subissue"]
+                        results = apply_eval_review_override(results)
+                        # Also flag rows for review when the sub-issue (Level 2) prediction is
+                        # wrong, even if Level 1 was correct. apply_eval_review_override only
+                        # forces review on Level 1 mistakes by design (see model_pipeline.py);
+                        # this extends that behaviour without touching that file.
+                        results["needs_review"] = results["needs_review"] | (~results["subissue_correct"])
+                        st.session_state.results_df = results
+                        st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Loaded {n_complaints} real held-out complaints. **{len(results)}** classified. Check the results below."}
+                    except (FileNotFoundError, ValueError) as e:
+                        st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Could not load held-out data: {e}"}
+                    except Exception as e:
+                        st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Pipeline failed: {e}"}
+                st.rerun()
 
-        if st.session_state.review_finalised and st.session_state.results_with_review is not None:
-            display_results = st.session_state.results_with_review.copy()
-            display_results["predicted_issue_broad"] = display_results["reviewed_issue"]
-            display_results["predicted_subissue"]    = display_results["reviewed_subissue"]
+    with tab_results:
+        if st.session_state.results_df is not None:
+            results = st.session_state.results_df
+
+            if st.session_state.review_finalised and st.session_state.results_with_review is not None:
+                display_results = st.session_state.results_with_review.copy()
+                display_results["predicted_issue_broad"] = display_results["reviewed_issue"]
+                display_results["predicted_subissue"]    = display_results["reviewed_subissue"]
+            else:
+                display_results = results
+
+            render_dashboard(display_results, st.session_state.dark_mode)
         else:
-            display_results = results
+            st.markdown("""
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;
+                padding:2.5rem;text-align:center;color:var(--muted);
+                display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px">
+      <div style="font-size:0.95rem">No results yet. Load real complaints to see the analysis here.</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-        render_dashboard(display_results, st.session_state.dark_mode)
-    else:
-        st.markdown("""
-<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;
-            padding:2.5rem;text-align:center;color:var(--muted);
-            display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px">
-  <div style="font-size:0.95rem">No results yet. Load real complaints to see the analysis here.</div>
+    with tab_review:
+        if st.session_state.results_df is not None:
+            render_review_queue(st.session_state.results_df, st.session_state.dark_mode)
+        else:
+            st.markdown("""
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;
+                padding:2.5rem;text-align:center;color:var(--muted);
+                display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px">
+      <div style="font-size:0.95rem">No results yet. Run the pipeline first to review complaints.</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ── NAV ROUTING ───────────────────────────────────────────────────────────────
+if st.session_state.nav_section == "About":
+    st.markdown("""
+<div style="max-width:760px;margin:3.5rem auto;padding:2.5rem;background:var(--surface);
+            border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.2)">
+  <h2 style="margin-bottom:1rem;letter-spacing:-0.02em;">About ComplaintFlow</h2>
+  <p style="color:var(--muted);line-height:1.7;font-size:0.95rem">
+    ComplaintFlow is an Hierarchical NLP pipeline that classifies CFPB student loan complaints
+    into structured Issue and Sub-issue labels, with confidence-based routing to a human review app.
+  </p>
 </div>
 """, unsafe_allow_html=True)
 
-with tab_review:
-    if st.session_state.results_df is not None:
-        render_review_queue(st.session_state.results_df, st.session_state.dark_mode)
-    else:
-        st.markdown("""
-<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;
-            padding:2.5rem;text-align:center;color:var(--muted);
-            display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px">
-  <div style="font-size:0.95rem">No results yet. Run the pipeline first to review complaints.</div>
+elif st.session_state.nav_section == "Demo":
+    st.markdown("""
+<div style="max-width:760px;margin:3.5rem auto;padding:2.5rem;background:var(--surface);
+            border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.2);
+            text-align:center">
+  <h2 style="margin-bottom:0.5rem;letter-spacing:-0.02em;">Demo</h2>
+  <p style="color:var(--muted);font-size:0.95rem">Coming soon.</p>
 </div>
 """, unsafe_allow_html=True)
+
+elif st.session_state.nav_section == "App":
+    render_app_tabs()
