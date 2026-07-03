@@ -32,6 +32,7 @@ defaults = {
     "review_finalised":    False,
     "results_with_review": None,
     "nav_section":         "About",
+    "active_app_tab":      "Activity Log",
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -873,9 +874,23 @@ def render_app_tabs():
     st.markdown(_badge_html(), unsafe_allow_html=True)
 
     # ── TABS ──────────────────────────────────────────────────────────────────────
-    tab_log, tab_results, tab_review = st.tabs(["Activity Log", "Results & Analysis", "Human Review Queue"])
+    tab_names = ["Activity Log", "Results & Analysis", "Human Review Queue"]
+    tab_cols = st.columns(3)
+    for col, name in zip(tab_cols, tab_names):
+        with col:
+            is_active = st.session_state.active_app_tab == name
+            if st.button(
+                name,
+                key=f"apptab_{name}",
+                type="primary" if is_active else "secondary",
+                use_container_width=True,
+            ):
+                st.session_state.active_app_tab = name
+                st.rerun()
 
-    with tab_log:
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    if st.session_state.active_app_tab == "Activity Log":
         chat_col, ctrl_col = st.columns([5, 1])
 
         with ctrl_col:
@@ -924,13 +939,14 @@ def render_app_tabs():
                         results["needs_review"] = results["needs_review"] | (~results["subissue_correct"])
                         st.session_state.results_df = results
                         st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Loaded {n_complaints} real held-out complaints. **{len(results)}** classified. Check the results below."}
+                        st.session_state.active_app_tab = "Results & Analysis"
                     except (FileNotFoundError, ValueError) as e:
                         st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Could not load held-out data: {e}"}
                     except Exception as e:
                         st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Pipeline failed: {e}"}
                 st.rerun()
 
-    with tab_results:
+    elif st.session_state.active_app_tab == "Results & Analysis":
         if st.session_state.results_df is not None:
             results = st.session_state.results_df
 
@@ -951,7 +967,7 @@ def render_app_tabs():
     </div>
     """, unsafe_allow_html=True)
 
-    with tab_review:
+    elif st.session_state.active_app_tab == "Human Review Queue":
         if st.session_state.results_df is not None:
             render_review_queue(st.session_state.results_df, st.session_state.dark_mode)
         else:
