@@ -7,7 +7,7 @@ from pathlib import Path
 import streamlit as st
 import pandas as pd
 
-from complaint_generator import generate_synthetic_complaints
+from real_complaint_loader import load_real_complaints
 from model_pipeline import (
     HierarchicalComplaintClassifier,
     DEFAULT_REJECTION_THRESHOLD,
@@ -17,6 +17,9 @@ from human_review_section import render_review_queue
 
 st.set_page_config(page_title="ComplaintFlow", layout="wide")
 
+HOLDOUT_DATA_PATH = os.path.join("data", "cfpb_2022_holdout.csv")
+
+# ── SESSION STATE DEFAULTS ────────────────────────────────────────────────────
 defaults = {
     "dark_mode":           True,
     "results_df":          None,
@@ -25,10 +28,6 @@ defaults = {
     "chat_open":           True,
     "chat_fullscreen":     False,
     "results_fullscreen":  False,
-    "groq_api_key":        None,
-    "rate_limit_count":    0,
-    "rate_limit_ts":       0.0,
-    "key_validated":       False,
     "review_decisions":    {},
     "review_finalised":    False,
     "results_with_review": None,
@@ -37,33 +36,10 @@ for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-RATE_LIMIT_MAX    = 5
-RATE_LIMIT_WINDOW = 3600
-
-def check_rate_limit():
-    now     = time.time()
-    elapsed = now - st.session_state.rate_limit_ts
-    if elapsed > RATE_LIMIT_WINDOW:
-        st.session_state.rate_limit_count = 0
-        st.session_state.rate_limit_ts    = now
-    if st.session_state.rate_limit_count >= RATE_LIMIT_MAX:
-        remaining = int(RATE_LIMIT_WINDOW - elapsed)
-        return False, max(remaining, 0)
-    return True, 0
-
-def increment_rate_limit():
-    if st.session_state.rate_limit_count == 0:
-        st.session_state.rate_limit_ts = time.time()
-    st.session_state.rate_limit_count += 1
-
-def validate_api_key(key: str) -> bool:
-    return isinstance(key, str) and key.strip().startswith("gsk_") and len(key.strip()) > 20
-
-active_key = st.session_state.groq_api_key
-
+# ── THEME (DARK MODE ONLY, refined glass palette) ─────────────────────────────
 DARK_BG       = "#0b0f1a"
-DARK_SURFACE  = "#1e293b"
-GLASS_SURFACE = "rgba(30, 41, 59, 0.6)"
+DARK_SURFACE  = "#1e293b"                  # opaque, used where legibility > depth (sidebar)
+GLASS_SURFACE = "rgba(30, 41, 59, 0.6)"    # translucent, used for cards/panels/bubbles
 
 PRIMARY       = "#818cf8"
 PRIMARY_HOVER = "#6366f1"
@@ -261,6 +237,7 @@ div[data-testid="stAlert"] svg {{ display: none !important; }}
     margin: 0 !important;
 }}
 
+/* Tab styling */
 [data-testid="stTabs"] [role="tablist"] {{
     gap: 4px;
     border-bottom: 1px solid var(--border);
@@ -424,7 +401,7 @@ def render_chat(height="420px"):
   <div style="width:10px;height:10px;border-radius:50%;background:var(--primary);
               animation:pulseDot 1.8s ease-in-out infinite;"></div>
   <div style="font-size:0.9rem; font-weight:500; letter-spacing:-0.02em;">System Idle</div>
-  <div style="font-size:0.8rem; opacity:0.7;">Hit <b>Generate & Classify</b> to start the pipeline.</div>
+  <div style="font-size:0.8rem; opacity:0.7;">Hit <b>Load & Classify</b> to sample real held-out complaints.</div>
 </div>
 <style>
 @keyframes pulseDot {{
@@ -458,7 +435,7 @@ def render_dashboard(results: pd.DataFrame, dark_mode: bool):
     if "joint_confidence" not in df.columns:
         df["joint_confidence"] = 0.0
     if "joint_perplexity" not in df.columns:
-        df["joint_perplexity"] = 0.0
+        df["joint_perplexity"] = 1.0
     if "predicted_issue_broad" not in df.columns:
         df["predicted_issue_broad"] = df.get("predicted_issue", "Unknown")
     if "predicted_subissue" not in df.columns:
@@ -479,8 +456,7 @@ def render_dashboard(results: pd.DataFrame, dark_mode: bool):
     cols_needed = [
         "complaint_text", "true_issue", "predicted_issue_broad",
         "issue_correct", "true_subissue", "predicted_subissue",
-        "subissue_correct", "joint_confidence", "needs_review", "review_source",
-        "joint_perplexity",
+        "subissue_correct", "joint_confidence", "joint_perplexity", "needs_review", "review_source",
     ]
     df = df[cols_needed].copy()
     df["issue_correct"]    = df["issue_correct"].fillna(False).astype(bool)
@@ -523,7 +499,10 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
 .metric-sub{{font-size:12px;color:var(--muted);margin-top:4px}}
 
 .tabs{{display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:1px}}
-.tab{{padding:8px 16px;font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}}
+.tab{{
+  padding:8px 16px;font-size:14px;font-weight:500;color:var(--muted);
+  cursor:pointer;border-bottom:2px solid transparent;transition:all .2s
+}}
 .tab:hover{{color:var(--text)}}
 .tab.active{{color:var(--primary);border-bottom-color:var(--primary)}}
 .tab-panel{{display:none}}.tab-panel.active{{display:block}}
@@ -542,11 +521,14 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
 .btbl td{{padding:9px;border-bottom:1px solid var(--border)}}
 
 .dtbl-wrap{{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px}}
-.dtbl{{width:100%;border-collapse:collapse;font-size:13px;min-width:1100px}}
-.dtbl th{{text-align:left;padding:12px 8px;color:var(--muted);background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;cursor:pointer;font-weight:600;white-space:nowrap}}
+.dtbl{{width:100%;border-collapse:collapse;font-size:13px;min-width:1000px}}
+.dtbl th{{
+  text-align:left;padding:12px 8px;color:var(--muted);background:var(--surface);
+  border-bottom:1px solid var(--border);position:sticky;top:0;cursor:pointer;font-weight:600;
+  white-space:nowrap
+}}
 .dtbl th:hover{{color:var(--text)}}
 .dtbl td{{padding:10px 8px;border-bottom:1px solid var(--border);vertical-align:top}}
-.dtbl th:nth-child(10),.dtbl td:nth-child(10),.dtbl th:nth-child(11),.dtbl td:nth-child(11){{text-align:center}}
 .dtbl tr:hover{{background:rgba(255,255,255,0.02)}}
 
 .badge{{padding:3px 9px;border-radius:4px;font-size:12px;font-weight:600}}
@@ -554,11 +536,13 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
 .b-review{{background:rgba(239,68,68,0.1);color:var(--danger)}}
 .b-human{{background:rgba(99,102,241,0.15);color:var(--primary)}}
 .match-y{{color:var(--accent);font-weight:700}}.match-n{{color:var(--danger);font-weight:700}}
-.conf-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px;display:inline-block;min-width:34px;text-align:center;white-space:nowrap}}
-.perp-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px;background:rgba(148,163,184,0.12);color:var(--muted);display:inline-block;min-width:34px;text-align:center;white-space:nowrap}}
+.conf-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px;display:inline-block;min-width:44px;text-align:center}}
 .c-hi{{background:rgba(16,185,129,0.15);color:var(--accent)}}
 .c-mid{{background:rgba(99,102,241,0.15);color:var(--primary)}}
 .c-lo{{background:rgba(239,68,68,0.15);color:var(--danger)}}
+.p-hi{{background:rgba(45,212,191,0.15);color:#2dd4bf}}
+.p-mid{{background:rgba(251,191,36,0.15);color:#fbbf24}}
+.p-lo{{background:rgba(251,113,133,0.15);color:#fb7185}}
 .si{{font-size:11px;margin-left:4px;opacity:0.3}}.si.on{{opacity:1;color:var(--primary)}}
 </style>
 </head>
@@ -567,8 +551,8 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
     <div class="metric"><div class="metric-label">Total</div><div class="metric-value" id="m-total">0</div><div class="metric-sub" id="m-total-sub"></div></div>
     <div class="metric"><div class="metric-label">Auto-Labelled</div><div class="metric-value" id="m-auto">0</div><div class="metric-sub" id="m-auto-pct"></div></div>
     <div class="metric"><div class="metric-label">Needs Review</div><div class="metric-value" id="m-review">0</div><div class="metric-sub" id="m-review-pct"></div></div>
-    <div class="metric"><div class="metric-label">L1 Accuracy</div><div class="metric-value" id="m-l1">0%</div><div class="metric-sub">all complaints</div></div>
-    <div class="metric"><div class="metric-label">L2 Accuracy</div><div class="metric-value" id="m-l2">0%</div><div class="metric-sub">all complaints</div></div>
+    <div class="metric"><div class="metric-label">Level 1 Accuracy</div><div class="metric-value" id="m-l1">0%</div><div class="metric-sub">all complaints</div></div>
+    <div class="metric"><div class="metric-label">Level 2 Accuracy</div><div class="metric-value" id="m-l2">0%</div><div class="metric-sub">all complaints</div></div>
   </div>
 
   <div class="tabs">
@@ -584,8 +568,8 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
       <div class="card"><div class="card-title">Routing Split</div><div class="chart-wrap" style="height:160px"><canvas id="routeChart"></canvas></div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div class="card"><div class="card-title">L1 accuracy by broad issue</div><div id="l1-cat"></div></div>
-      <div class="card"><div class="card-title">L2 accuracy by sub-issue</div><div id="l2-cat"></div></div>
+      <div class="card"><div class="card-title">Level 1 accuracy by broad issue</div><div id="l1-cat"></div></div>
+      <div class="card"><div class="card-title">Level 2 accuracy by sub-issue</div><div id="l2-cat"></div></div>
     </div>
   </div>
 
@@ -600,19 +584,7 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
     <div class="dtbl-wrap" style="margin-top:4px">
       <table class="dtbl" id="dtbl">
         <thead>
-          <tr>
-            <th style="width:32px" data-col="idx"># <span class="si" id="si-idx"></span></th>
-            <th style="width:200px">Complaint</th>
-            <th style="width:60px">Status</th>
-            <th data-col="true_issue">True issue <span class="si" id="si-true_issue"></span></th>
-            <th data-col="predicted_issue_broad">Pred issue <span class="si" id="si-predicted_issue_broad"></span></th>
-            <th style="width:32px" data-col="issue_correct">L1 <span class="si" id="si-issue_correct"></span></th>
-            <th data-col="true_subissue">True sub-issue <span class="si" id="si-true_subissue"></span></th>
-            <th data-col="predicted_subissue">Pred sub-issue <span class="si" id="si-predicted_subissue"></span></th>
-            <th style="width:32px" data-col="subissue_correct">L2 <span class="si" id="si-subissue_correct"></span></th>
-            <th style="width:62px" data-col="joint_confidence">Conf <span class="si" id="si-joint_confidence"></span></th>
-            <th style="width:72px" data-col="joint_perplexity">Perplexity <span class="si" id="si-joint_perplexity"></span></th>
-          </tr>
+          <tr><th style="width:32px" data-col="idx"># <span class="si" id="si-idx"></span></th><th style="width:200px">Complaint</th><th style="width:60px">Status</th><th style="text-align:left" data-col="true_issue">True issue <span class="si" id="si-true_issue"></span></th><th style="text-align:left" data-col="predicted_issue_broad">Pred issue <span class="si" id="si-predicted_issue_broad"></span></th><th style="width:32px;text-align:left" data-col="issue_correct">Level 1 <span class="si" id="si-issue_correct"></span></th><th style="text-align:left" data-col="true_subissue">True sub-issue <span class="si" id="si-true_subissue"></span></th><th style="text-align:left" data-col="predicted_subissue">Pred sub-issue <span class="si" id="si-predicted_subissue"></span></th><th style="width:32px;text-align:left" data-col="subissue_correct">Level 2 <span class="si" id="si-subissue_correct"></span></th><th style="width:62px;text-align:right" data-col="joint_confidence">Conf <span class="si" id="si-joint_confidence"></span></th><th style="width:70px;text-align:left" data-col="joint_perplexity">Perplexity <span class="si" id="si-joint_perplexity"></span></th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -667,11 +639,11 @@ function render(){{
     return;
   }}
 
-  document.getElementById('acc-bars').innerHTML =
-    barRow('L1 correct', l1Acc, 'var(--primary)') +
-    barRow('L1 incorrect', 1 - l1Acc, 'var(--danger)') +
-    barRow('L2 correct', l2Acc, 'var(--primary)') +
-    barRow('L2 incorrect', 1 - l2Acc, 'var(--danger)');
+  document.getElementById('acc-bars').innerHTML = 
+    barRow('Level 1 correct', l1Acc, 'var(--primary)') + 
+    barRow('Level 1 incorrect', 1 - l1Acc, 'var(--danger)') +
+    barRow('Level 2 correct', l2Acc, 'var(--primary)') +
+    barRow('Level 2 incorrect', 1 - l2Acc, 'var(--danger)');
 
   const bins = new Array(10).fill(0);
   data.forEach(r => {{ const b = Math.min(9, Math.floor(r.joint_confidence * 10)); bins[b]++; }});
@@ -711,16 +683,6 @@ function render(){{
     return `<tr><td>${{s}}</td><td>${{gt}}</td><td>${{pr}}</td><td style="color:${{col}};font-weight:600">${{d > 0 ? '+' : ''}}${{d}}</td></tr>`;
   }}).join('') || '<tr><td colspan="4" style="color:var(--muted);padding:10px">No data.</td></tr>';
 
-  const perpVals = data.map(r => r.joint_perplexity).filter(v => v != null).sort((a, b) => a - b);
-  const quantile = (arr, q) => {{
-    if(!arr.length) return null;
-    const pos = (arr.length - 1) * q;
-    const base = Math.floor(pos), rest = pos - base;
-    return arr[base + 1] !== undefined ? arr[base] + rest * (arr[base + 1] - arr[base]) : arr[base];
-  }};
-  const perpLo = quantile(perpVals, 1/3);
-  const perpHi = quantile(perpVals, 2/3);
-
   const sorted = [...data].sort((a, b) => {{
     let av = sortCol === 'idx' ? a.idx : a[sortCol];
     let bv = sortCol === 'idx' ? b.idx : b[sortCol];
@@ -738,11 +700,8 @@ function render(){{
     const sc = r.subissue_correct ? '<span class="match-y">✓</span>' : '<span class="match-n">✗</span>';
     const conf = Math.round(r.joint_confidence * 100);
     const cls = conf >= 80 ? 'c-hi' : conf >= 60 ? 'c-mid' : 'c-lo';
-    const perp = r.joint_perplexity != null ? r.joint_perplexity.toFixed(2) : '--';
-    const perpCls = r.joint_perplexity == null || perpLo == null ? ''
-      : r.joint_perplexity <= perpLo ? 'c-hi'
-      : r.joint_perplexity <= perpHi ? 'c-mid'
-      : 'c-lo';
+    const perp = r.joint_perplexity.toFixed(2);
+    const perpCls = r.joint_perplexity < 2.0 ? 'p-hi' : r.joint_perplexity < 3.0 ? 'p-mid' : 'p-lo';
     return `<tr>
       <td style="font-weight:600">${{r.idx + 1}}</td>
       <td title="${{r.complaint_text}}" style="font-size:12px">${{snip}}</td>
@@ -753,8 +712,8 @@ function render(){{
       <td style="font-size:12px">${{r.true_subissue}}</td>
       <td style="font-size:12px">${{r.predicted_subissue}}</td>
       <td>${{sc}}</td>
-      <td><span class="conf-chip ${{cls}}">${{conf}}%</span></td>
-      <td><span class="perp-chip ${{perpCls}}" title="Bottom third of this batch's perplexity = certain · middle third = moderate · top third = high uncertainty">${{perp}}</span></td>
+      <td style="text-align:center"><span class="conf-chip ${{cls}}">${{conf}}%</span></td>
+      <td style="text-align:center"><span class="conf-chip ${{perpCls}}" title="~1.0 certain, ~2.0 moderate, ≥3.0 high uncertainty">${{perp}}</span></td>
     </tr>`;
   }}).join('');
   document.getElementById('detail-empty').style.display = sorted.length ? 'none' : '';
@@ -809,6 +768,7 @@ render();
     st.components.v1.html(html, height=720, scrolling=True)
 
 
+# ── LOGO BADGE ────────────────────────────────────────────────────────────────
 def _badge_html() -> str:
     logo_path = Path(__file__).parent / "logo.png"
     if not logo_path.exists():
@@ -821,51 +781,15 @@ def _badge_html() -> str:
     )
 
 
-if not active_key:
-    st.markdown(_badge_html(), unsafe_allow_html=True)
-
-    st.markdown(f"""
-<div class="key-modal">
-  <div class="key-modal-title">Groq API Key Required</div>
-  <div class="key-modal-sub">
-    This app uses the <b>Groq API</b> to generate synthetic complaints.<br>
-    Your key is used only for this session and is never stored.<br><br>
-    Don't have a key? Get one free at
-    <a href="https://console.groq.com" target="_blank" style="color:{PRIMARY}">console.groq.com</a>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-    col_l, col_c, col_r = st.columns([1, 2, 1])
-    with col_c:
-        entered_key = st.text_input("Paste your Groq API key", type="password", placeholder="gsk_...", label_visibility="collapsed")
-        if st.button("Connect", type="primary", use_container_width=True):
-            if validate_api_key(entered_key):
-                st.session_state.groq_api_key = entered_key.strip()
-                st.session_state.key_validated = True
-                st.rerun()
-            else:
-                st.error("Invalid key format. Groq keys start with **gsk_**.")
-    st.stop()
-
-active_key = st.session_state.groq_api_key
-
+# ── FULL APP ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("**System Status**")
-    st.success("API Connected")
-
-    allowed, secs_left = check_rate_limit()
-    st.caption(f"Runs this session: {st.session_state.rate_limit_count} / {RATE_LIMIT_MAX}")
-    if not allowed:
-        mins = secs_left // 60
-        st.warning(f"Rate limit reached. Resets in ~{mins} min.")
+    if os.path.exists(HOLDOUT_DATA_PATH):
+        st.success("Held-out data found")
+    else:
+        st.error(f"Held-out data not found at `{HOLDOUT_DATA_PATH}`. Place the CFPB 2022 holdout CSV there.")
 
     st.divider()
-    if st.button("Change API Key", use_container_width=True):
-        st.session_state.groq_api_key  = None
-        st.session_state.key_validated = False
-        st.rerun()
-
     if st.button("Reset Dashboard", use_container_width=True):
         st.session_state.results_df    = None
         st.session_state.chat_messages = []
@@ -884,6 +808,7 @@ with st.sidebar:
 
 st.markdown(_badge_html(), unsafe_allow_html=True)
 
+# ── TABS ──────────────────────────────────────────────────────────────────────
 tab_log, tab_results, tab_review = st.tabs(["Activity Log", "Results & Analysis", "Human Review Queue"])
 
 with tab_log:
@@ -891,32 +816,22 @@ with tab_log:
 
     with ctrl_col:
         st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
-        n_complaints = st.slider("Number of complaints", min_value=10, max_value=25, value=10, step=1)
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        n_complaints = st.slider("Number of complaints", min_value=10, max_value=30, value=20, step=1)
         threshold = st.slider("Joint Confidence Threshold", 0.0, 1.0, DEFAULT_REJECTION_THRESHOLD, 0.01)
         st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-        generate_clicked = st.button("Generate & Classify", type="primary", use_container_width=True)
+        generate_clicked = st.button("Load & Classify", type="primary", use_container_width=True)
 
     with chat_col:
         render_chat("400px")
 
         if generate_clicked:
-            allowed, secs_left = check_rate_limit()
-            if not allowed:
-                mins = secs_left // 60
-                st.error(f"Rate limit reached. Please wait ~{mins} minute(s).")
-                st.stop()
-
-            user_msg = f"Classify {n_complaints} student loan complaints — threshold {threshold:.2f}"
+            user_msg = f"Classify {n_complaints} student loan complaints, threshold {threshold:.2f}"
             st.session_state.chat_messages = [{"role": "user", "content": user_msg}, {"role": "assistant", "content": "Processing pipeline..."}]
             st.session_state.review_decisions = {}; st.session_state.review_finalised = False; st.session_state.results_with_review = None
 
             with st.spinner("Running pipeline..."):
                 try:
-                    records = generate_synthetic_complaints(n=n_complaints, api_key=active_key, topics=[f"Please generate {n_complaints} standard complaints regarding student loans."])
-                    increment_rate_limit()
-                    if not records:
-                        st.session_state.chat_messages[-1] = {"role": "assistant", "content": "Generator returned 0 records."}; st.rerun()
+                    records = load_real_complaints(HOLDOUT_DATA_PATH, n=n_complaints, random_state=None)
 
                     complaint_texts, true_issues, true_subissues = [], [], []
                     for r in records:
@@ -938,8 +853,15 @@ with tab_log:
                     results["issue_correct"] = results["predicted_issue_broad"] == results["true_issue"]
                     results["subissue_correct"] = results["predicted_subissue"] == results["true_subissue"]
                     results = apply_eval_review_override(results)
+                    # Also flag rows for review when the sub-issue (Level 2) prediction is
+                    # wrong, even if Level 1 was correct. apply_eval_review_override only
+                    # forces review on Level 1 mistakes by design (see model_pipeline.py);
+                    # this extends that behaviour without touching that file.
+                    results["needs_review"] = results["needs_review"] | (~results["subissue_correct"])
                     st.session_state.results_df = results
-                    st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Done! **{len(results)}** complaints classified. Check the results below."}
+                    st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Loaded {n_complaints} real held-out complaints. **{len(results)}** classified. Check the results below."}
+                except (FileNotFoundError, ValueError) as e:
+                    st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Could not load held-out data: {e}"}
                 except Exception as e:
                     st.session_state.chat_messages[-1] = {"role": "assistant", "content": f"Pipeline failed: {e}"}
             st.rerun()
@@ -961,7 +883,7 @@ with tab_results:
 <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;
             padding:2.5rem;text-align:center;color:var(--muted);
             display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px">
-  <div style="font-size:0.95rem">No results yet. Generate complaints to see the analysis here.</div>
+  <div style="font-size:0.95rem">No results yet. Load real complaints to see the analysis here.</div>
 </div>
 """, unsafe_allow_html=True)
 
