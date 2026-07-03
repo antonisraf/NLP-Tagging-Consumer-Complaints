@@ -1,7 +1,6 @@
-
 """
-Loads real, held-out CFPB student loan complaints (e.g. year 2022, outside
-the 2023-early 2026 training window) to use as evaluation data instead of
+Loads real, held-out CFPB student loan complaints (e.g. years 2021-2022,
+outside the 2023-early 2026 training window) to use as evaluation data instead of
 LLM-generated synthetic complaints.
 
 Replaces complaint_generator.py: no API key, no LLM bias/style artifacts,

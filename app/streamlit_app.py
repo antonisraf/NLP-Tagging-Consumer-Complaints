@@ -17,7 +17,7 @@ from human_review_section import render_review_queue
 
 st.set_page_config(page_title="ComplaintFlow", layout="wide")
 
-HOLDOUT_DATA_PATH = os.path.join("data", "cfpb_2022_holdout.csv")
+HOLDOUT_DATA_PATH = os.path.join("data", "cfpb_2021-2022_holdout.csv")
 
 # ── SESSION STATE DEFAULTS ────────────────────────────────────────────────────
 defaults = {
@@ -871,7 +871,7 @@ with st.sidebar:
     if os.path.exists(HOLDOUT_DATA_PATH):
         st.success("Held-out data found")
     else:
-        st.error(f"Held-out data not found at `{HOLDOUT_DATA_PATH}`. Place the CFPB 2022 holdout CSV there.")
+        st.error(f"Held-out data not found at `{HOLDOUT_DATA_PATH}`. Place the CFPB 2021-2022 holdout CSV there.")
 
     st.divider()
     if st.button("Reset Dashboard", use_container_width=True):
