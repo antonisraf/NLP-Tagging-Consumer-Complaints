@@ -186,6 +186,33 @@ div[data-testid="stAlert"] {{
 div[data-testid="stAlert"] * {{ color: var(--text) !important; }}
 div[data-testid="stAlert"] svg {{ display: none !important; }}
 
+div[data-testid="stExpander"] {{
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    margin-bottom: 8px !important;
+    overflow: hidden;
+}}
+div[data-testid="stExpander"] summary {{
+    padding: 10px 14px !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    color: var(--text) !important;
+}}
+div[data-testid="stExpander"] summary:hover {{
+    color: var(--primary) !important;
+}}
+div[data-testid="stExpander"] summary svg {{
+    fill: var(--muted) !important;
+}}
+div[data-testid="stExpanderDetails"] {{
+    padding: 4px 14px 16px 14px !important;
+}}
+
+div[data-testid="stToggle"] label div[data-checked="true"] {{
+    background-color: var(--primary) !important;
+}}
+
 .chat-container {{
     display: flex; flex-direction: column; gap: 8px;
     padding: 1rem; background: var(--surface); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
