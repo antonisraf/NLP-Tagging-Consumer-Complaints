@@ -523,12 +523,12 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
 .dtbl-wrap{{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px}}
 .dtbl{{width:100%;border-collapse:collapse;font-size:13px;min-width:1000px}}
 .dtbl th{{
-  text-align:left;padding:12px 8px;color:var(--muted);background:var(--surface);
+  text-align:center;padding:12px 8px;color:var(--muted);background:var(--surface);
   border-bottom:1px solid var(--border);position:sticky;top:0;cursor:pointer;font-weight:600;
   white-space:nowrap
 }}
 .dtbl th:hover{{color:var(--text)}}
-.dtbl td{{padding:10px 8px;border-bottom:1px solid var(--border);vertical-align:top}}
+.dtbl td{{padding:10px 8px;border-bottom:1px solid var(--border);vertical-align:top;text-align:center}}
 .dtbl tr:hover{{background:rgba(255,255,255,0.02)}}
 
 .badge{{padding:3px 9px;border-radius:4px;font-size:12px;font-weight:600}}
@@ -537,6 +537,8 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
 .b-human{{background:rgba(99,102,241,0.15);color:var(--primary)}}
 .match-y{{color:var(--accent);font-weight:700}}.match-n{{color:var(--danger);font-weight:700}}
 .conf-chip{{padding:3px 7px;border-radius:4px;font-weight:600;font-size:12px;display:inline-block;min-width:44px;text-align:center}}
+.col-center{{text-align:center !important}}
+.col-right{{text-align:right !important}}
 .c-hi{{background:rgba(16,185,129,0.15);color:var(--accent)}}
 .c-mid{{background:rgba(99,102,241,0.15);color:var(--primary)}}
 .c-lo{{background:rgba(239,68,68,0.15);color:var(--danger)}}
@@ -575,8 +577,8 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
 
   <div id="tab-breakdown" class="tab-panel">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div class="card"><div class="card-title">Broad issue — truth vs predicted</div><table class="btbl" id="tbl-l1"><thead><tr><th>Category</th><th>Truth</th><th>Predicted</th><th>Diff</th></tr></thead><tbody></tbody></table></div>
-      <div class="card"><div class="card-title">Sub-issue — truth vs predicted</div><table class="btbl" id="tbl-l2"><thead><tr><th>Category</th><th>Truth</th><th>Predicted</th><th>Diff</th></tr></thead><tbody></tbody></table></div>
+      <div class="card"><div class="card-title">Broad issue — truth vs predicted</div><table class="btbl" id="tbl-l1"><thead><tr><th>Category</th><th class="col-right">Truth</th><th class="col-right">Predicted</th><th class="col-right">Diff</th></tr></thead><tbody></tbody></table></div>
+      <div class="card"><div class="card-title">Sub-issue — truth vs predicted</div><table class="btbl" id="tbl-l2"><thead><tr><th>Category</th><th class="col-right">Truth</th><th class="col-right">Predicted</th><th class="col-right">Diff</th></tr></thead><tbody></tbody></table></div>
     </div>
   </div>
 
@@ -584,7 +586,7 @@ body{{background:var(--bg);color:var(--text);padding:12px 4px 8px}}
     <div class="dtbl-wrap" style="margin-top:4px">
       <table class="dtbl" id="dtbl">
         <thead>
-          <tr><th style="width:32px" data-col="idx"># <span class="si" id="si-idx"></span></th><th style="width:200px">Complaint</th><th style="width:60px">Status</th><th style="text-align:left" data-col="true_issue">True issue <span class="si" id="si-true_issue"></span></th><th style="text-align:left" data-col="predicted_issue_broad">Pred issue <span class="si" id="si-predicted_issue_broad"></span></th><th style="width:32px;text-align:left" data-col="issue_correct">Level 1 <span class="si" id="si-issue_correct"></span></th><th style="text-align:left" data-col="true_subissue">True sub-issue <span class="si" id="si-true_subissue"></span></th><th style="text-align:left" data-col="predicted_subissue">Pred sub-issue <span class="si" id="si-predicted_subissue"></span></th><th style="width:32px;text-align:left" data-col="subissue_correct">Level 2 <span class="si" id="si-subissue_correct"></span></th><th style="width:62px;text-align:right" data-col="joint_confidence">Conf <span class="si" id="si-joint_confidence"></span></th><th style="width:70px;text-align:left" data-col="joint_perplexity">Perplexity <span class="si" id="si-joint_perplexity"></span></th></tr>
+          <tr><th class="col-center" style="width:36px" data-col="idx"># <span class="si" id="si-idx"></span></th><th style="width:200px;text-align:left">Complaint</th><th class="col-center" style="width:70px">Status</th><th data-col="true_issue">True issue <span class="si" id="si-true_issue"></span></th><th data-col="predicted_issue_broad">Pred issue <span class="si" id="si-predicted_issue_broad"></span></th><th class="col-center" style="width:64px" data-col="issue_correct">Level 1 <span class="si" id="si-issue_correct"></span></th><th data-col="true_subissue">True sub-issue <span class="si" id="si-true_subissue"></span></th><th data-col="predicted_subissue">Pred sub-issue <span class="si" id="si-predicted_subissue"></span></th><th class="col-center" style="width:64px" data-col="subissue_correct">Level 2 <span class="si" id="si-subissue_correct"></span></th><th class="col-center" style="width:62px" data-col="joint_confidence">Conf <span class="si" id="si-joint_confidence"></span></th><th class="col-center" style="width:80px" data-col="joint_perplexity">Perplexity <span class="si" id="si-joint_perplexity"></span></th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -671,7 +673,7 @@ function render(){{
     const pr = data.filter(r => r.predicted_issue_broad === i).length;
     const d  = pr - gt;
     const col = d === 0 ? 'var(--muted)' : d > 0 ? 'var(--accent)' : 'var(--danger)';
-    return `<tr><td>${{i}}</td><td>${{gt}}</td><td>${{pr}}</td><td style="color:${{col}};font-weight:600">${{d > 0 ? '+' : ''}}${{d}}</td></tr>`;
+    return `<tr><td>${{i}}</td><td class="col-right">${{gt}}</td><td class="col-right">${{pr}}</td><td class="col-right" style="color:${{col}};font-weight:600">${{d > 0 ? '+' : ''}}${{d}}</td></tr>`;
   }}).join('') || '<tr><td colspan="4" style="color:var(--muted);padding:10px">No data.</td></tr>';
 
   const allSub = unique([...data.map(r => r.true_subissue), ...data.map(r => r.predicted_subissue)]);
@@ -680,7 +682,7 @@ function render(){{
     const pr = data.filter(r => r.predicted_subissue === s).length;
     const d  = pr - gt;
     const col = d === 0 ? 'var(--muted)' : d > 0 ? 'var(--accent)' : 'var(--danger)';
-    return `<tr><td>${{s}}</td><td>${{gt}}</td><td>${{pr}}</td><td style="color:${{col}};font-weight:600">${{d > 0 ? '+' : ''}}${{d}}</td></tr>`;
+    return `<tr><td>${{s}}</td><td class="col-right">${{gt}}</td><td class="col-right">${{pr}}</td><td class="col-right" style="color:${{col}};font-weight:600">${{d > 0 ? '+' : ''}}${{d}}</td></tr>`;
   }}).join('') || '<tr><td colspan="4" style="color:var(--muted);padding:10px">No data.</td></tr>';
 
   const sorted = [...data].sort((a, b) => {{
@@ -699,21 +701,21 @@ function render(){{
     const ic = r.issue_correct ? '<span class="match-y">✓</span>' : '<span class="match-n">✗</span>';
     const sc = r.subissue_correct ? '<span class="match-y">✓</span>' : '<span class="match-n">✗</span>';
     const conf = Math.round(r.joint_confidence * 100);
-    const cls = conf >= 80 ? 'c-hi' : conf >= 60 ? 'c-mid' : 'c-lo';
+    const cls = conf >= 80 ? 'p-hi' : conf >= 60 ? 'p-mid' : 'p-lo';
     const perp = r.joint_perplexity.toFixed(2);
     const perpCls = r.joint_perplexity < 2.0 ? 'p-hi' : r.joint_perplexity < 3.0 ? 'p-mid' : 'p-lo';
     return `<tr>
-      <td style="font-weight:600">${{r.idx + 1}}</td>
-      <td title="${{r.complaint_text}}" style="font-size:12px">${{snip}}</td>
-      <td>${{badge}}</td>
+      <td class="col-center" style="font-weight:600">${{r.idx + 1}}</td>
+      <td title="${{r.complaint_text}}" style="font-size:12px;text-align:left">${{snip}}</td>
+      <td class="col-center">${{badge}}</td>
       <td style="font-size:12px">${{r.true_issue}}</td>
       <td style="font-size:12px">${{r.predicted_issue_broad}}</td>
-      <td>${{ic}}</td>
+      <td class="col-center">${{ic}}</td>
       <td style="font-size:12px">${{r.true_subissue}}</td>
       <td style="font-size:12px">${{r.predicted_subissue}}</td>
-      <td>${{sc}}</td>
-      <td style="text-align:center"><span class="conf-chip ${{cls}}">${{conf}}%</span></td>
-      <td style="text-align:center"><span class="conf-chip ${{perpCls}}" title="~1.0 certain, ~2.0 moderate, ≥3.0 high uncertainty">${{perp}}</span></td>
+      <td class="col-center">${{sc}}</td>
+      <td class="col-center"><span class="conf-chip ${{cls}}">${{conf}}%</span></td>
+      <td class="col-center"><span class="conf-chip ${{perpCls}}" title="~1.0 certain, ~2.0 moderate, ≥3.0 high uncertainty">${{perp}}</span></td>
     </tr>`;
   }}).join('');
   document.getElementById('detail-empty').style.display = sorted.length ? 'none' : '';
