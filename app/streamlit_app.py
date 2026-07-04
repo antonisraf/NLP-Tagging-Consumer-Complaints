@@ -1019,16 +1019,293 @@ if st.session_state.nav_section == "About":
   </p>
 </div>
 """, unsafe_allow_html=True)
-
 elif st.session_state.nav_section == "Demo":
+    import hashlib
+
+    if "demo_ran_for" not in st.session_state:
+        st.session_state.demo_ran_for = None
+
+    DEMO_EXAMPLES = {
+        "Loan Servicing & Payments — Loan Information & Servicing": {
+            "text": (
+                "My loan servicer keeps sending me incorrect account statements. "
+                "The balance shown online does not match what they told me over the phone, "
+                "and I have been unable to get a clear breakdown of my remaining principal, "
+                "interest, and fees despite multiple requests over the past three months."
+            ),
+            "true_issue": "Loan Servicing & Payments",
+            "true_subissue": "Loan Information & Servicing",
+        },
+        "Loan Servicing & Payments — Payment & Repayment Issues": {
+            "text": (
+                "I enrolled in an income-driven repayment plan over six months ago but my "
+                "servicer continues to charge me the old standard monthly amount. Two payments "
+                "have already been debited incorrectly and I have not received any refund or "
+                "confirmation that the plan change was actually processed."
+            ),
+            "true_issue": "Loan Servicing & Payments",
+            "true_subissue": "Payment & Repayment Issues",
+        },
+        "Non-Servicing Issues — Credit Reporting Issues": {
+            "text": (
+                "My student loan servicer reported a late payment to all three credit bureaus "
+                "even though I had an approved deferment in place at the time. My credit score "
+                "dropped significantly as a result and the servicer has refused to submit a "
+                "correction despite my repeated written disputes."
+            ),
+            "true_issue": "Non-Servicing Issues",
+            "true_subissue": "Credit Reporting Issues",
+        },
+        "Non-Servicing Issues — Loan Acquisition & Eligibility": {
+            "text": (
+                "I applied for a federal student loan to cover my upcoming semester but was "
+                "told I am ineligible due to a prior default that was already resolved and "
+                "removed from my record two years ago. The financial aid office cannot explain "
+                "why the system still shows me as ineligible and I am at risk of losing my "
+                "enrollment for the semester."
+            ),
+            "true_issue": "Non-Servicing Issues",
+            "true_subissue": "Loan Acquisition & Eligibility",
+        },
+    }
+
+    # Only structural CSS here — no background colors, no new palette.
+    # Everything below reuses var(--surface) / var(--border) / var(--muted) / var(--text)
+    # so this section matches the rest of the app instead of introducing its own theme.
     st.markdown("""
-<div style="max-width:760px;margin:3.5rem auto;padding:2.5rem;background:var(--surface);
-            border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.2);
-            text-align:center">
-  <h2 style="margin-bottom:0.5rem;letter-spacing:-0.02em;">Demo</h2>
-  <p style="color:var(--muted);font-size:0.95rem">Coming soon.</p>
+<style>
+@keyframes bar-fill { from { width:0%; } }
+.bar-fill { animation: bar-fill 1s cubic-bezier(.16,1,.3,1); }
+</style>
+""", unsafe_allow_html=True)
+
+    # ── Section header ──────────────────────────────────────────────────────
+    st.markdown("""
+<div style="max-width:1180px;margin:2.5rem auto 1.8rem auto;padding:0 1rem;text-align:left">
+  <div style="font-size:11px;font-weight:700;letter-spacing:0.14em;color:#818cf8;
+              text-transform:uppercase;margin-bottom:0.5rem;text-align:left">Live Demo · 02</div>
+  <h2 style="margin:0;font-size:1.7rem;letter-spacing:-0.03em;max-width:640px;
+             color:var(--text);text-align:left">
+    Run a real complaint through the classifier
+  </h2>
 </div>
 """, unsafe_allow_html=True)
+
+    st.markdown('<div style="max-width:1180px;margin:0 auto;padding:0 1rem">', unsafe_allow_html=True)
+    rail, workspace = st.columns([1, 2], gap="large")
+
+    with rail:
+        st.markdown("""
+<div style="position:sticky;top:1.5rem">
+  <p style="color:var(--muted);line-height:1.75;font-size:0.86rem;margin-bottom:1.8rem">
+    ComplaintFlow is a hierarchical classifier trained on CFPB student loan complaints.
+    A two-stage ensemble of Logistic Regression and LinearSVC models on TF-IDF features
+    assigns a <b style="color:var(--text)">broad issue</b> and a <b style="color:var(--text)">sub-issue</b>,
+    each backed by a joint confidence and joint perplexity score. Anything uncertain gets
+    routed to the <b style="color:var(--text)">Human Review Queue</b> instead of guessed at.
+  </p>
+
+  <div style="border-left:1px solid var(--border);margin-left:3px">
+    <div style="display:flex;gap:16px;padding:0 0 24px 0;position:relative">
+      <div style="width:8px;height:8px;border-radius:50%;background:#818cf8;
+                  margin-left:-5px;margin-top:4px;flex-shrink:0"></div>
+      <div style="font-size:0.82rem;color:var(--muted);line-height:1.6">
+        <b style="color:var(--text)">Pick a category</b> from the dropdown
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;padding:0 0 24px 0;position:relative">
+      <div style="width:8px;height:8px;border-radius:50%;background:#818cf8;
+                  margin-left:-5px;margin-top:4px;flex-shrink:0"></div>
+      <div style="font-size:0.82rem;color:var(--muted);line-height:1.6">
+        <b style="color:var(--text)">Read the complaint</b> that gets sent in
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;position:relative">
+      <div style="width:8px;height:8px;border-radius:50%;background:#818cf8;
+                  margin-left:-5px;margin-top:4px;flex-shrink:0"></div>
+      <div style="font-size:0.82rem;color:var(--muted);line-height:1.6">
+        <b style="color:var(--text)">Hit Classify</b> and see if the model gets it right
+      </div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    with workspace:
+        selected = st.selectbox(
+            "Category",
+            options=list(DEMO_EXAMPLES.keys()),
+            label_visibility="collapsed",
+            key="demo_select",
+        )
+
+        example        = DEMO_EXAMPLES[selected]
+        complaint_text = example["text"]
+        true_issue     = example["true_issue"]
+        true_subissue  = example["true_subissue"]
+        docket_id      = "#" + hashlib.md5(selected.encode()).hexdigest()[:5].upper()
+
+        st.markdown(f"""
+<div style="margin:8px 0 14px 0;padding:0;
+            background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+  <div style="display:flex;justify-content:space-between;align-items:center;
+              padding:9px 18px;background:rgba(255,255,255,0.02);
+              border-bottom:1px solid var(--border);font-size:10.5px;
+              letter-spacing:0.06em;color:var(--muted);font-family:monospace">
+    <span>CASE {docket_id}</span>
+    <span>READY</span>
+  </div>
+  <div style="padding:18px 20px;font-size:0.87rem;line-height:1.8;color:var(--muted)">
+    {complaint_text}
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+        run_demo = st.button("Classify", type="primary", use_container_width=True, key="demo_run")
+        if run_demo:
+            st.session_state.demo_ran_for = selected
+
+        # Persisted across reruns — unlike `run_demo`, this stays true even after
+        # a later rerun (e.g. clicking "Try the full app"), so buttons rendered
+        # below inside this block still get instantiated and can receive clicks.
+        show_result = st.session_state.get("demo_ran_for") == selected
+
+        # ── Result ────────────────────────────────────────────────────────────
+        if show_result:
+            with st.spinner("Running classifier..."):
+                try:
+                    clf = load_classifier()
+                    demo_result = clf.predict([complaint_text])
+                    row = demo_result.iloc[0]
+
+                    issue     = row["predicted_issue_broad"]
+                    subissue  = row["predicted_subissue"]
+                    conf      = row["joint_confidence"]
+                    perp      = row["joint_perplexity"]
+
+                    def score_color(pct):
+                        # one shared scale used for every progress bar in this card
+                        if pct >= 70:
+                            return "#10b981"   # green — strong
+                        elif pct >= 40:
+                            return "#818cf8"   # indigo — moderate
+                        else:
+                            return "#dc2626"   # red — weak
+
+                    conf_pct    = int(conf * 100)
+                    clarity_pct = max(0, min(100, int(100 - (perp / 5.0) * 100)))
+
+                    conf_color    = score_color(conf_pct)
+                    clarity_color = score_color(clarity_pct)
+
+                    l1_correct   = issue == true_issue
+                    l2_correct   = subissue == true_subissue
+                    needs_review = (not l1_correct) or (conf < DEFAULT_REJECTION_THRESHOLD)
+
+                    if l1_correct and l2_correct:
+                        verdict_badge = (
+                            "<span style='background:rgba(16,185,129,0.1);color:#34d399;"
+                            "padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;"
+                            "letter-spacing:0.04em;text-transform:uppercase'>✓ Correct</span>"
+                        )
+                    elif l1_correct and not l2_correct:
+                        verdict_badge = (
+                            "<span style='background:rgba(251,191,36,0.1);color:#fbbf24;"
+                            "padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;"
+                            "letter-spacing:0.04em;text-transform:uppercase'>~ Partial</span>"
+                        )
+                    else:
+                        verdict_badge = (
+                            "<span style='background:rgba(239,68,68,0.1);color:#f87171;"
+                            "padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;"
+                            "letter-spacing:0.04em;text-transform:uppercase'>✗ Incorrect</span>"
+                        )
+
+                    issue_border    = "rgba(16,185,129,0.25)" if l1_correct else "rgba(239,68,68,0.25)"
+                    issue_bg        = "rgba(16,185,129,0.06)" if l1_correct else "rgba(239,68,68,0.06)"
+                    subissue_border = "rgba(16,185,129,0.25)" if l2_correct else "rgba(239,68,68,0.25)"
+                    subissue_bg     = "rgba(16,185,129,0.06)" if l2_correct else "rgba(239,68,68,0.06)"
+
+                    if needs_review:
+                        reason = (
+                            f"Wrong Level 1 prediction and low confidence ({conf_pct}%)"
+                            if not l1_correct
+                            else f"Low confidence ({conf_pct}%) and high perplexity ({perp:.2f})"
+                        )
+                        st.markdown(f"""
+<div style="margin-top:1.4rem;padding:12px 18px;
+            background:rgba(251,191,36,0.07);border:1px solid rgba(251,191,36,0.2);
+            border-radius:10px;display:flex;align-items:center;gap:12px">
+  <span style="font-size:1.1rem">⚠</span>
+  <span style="font-size:0.82rem;color:#fbbf24;line-height:1.6">
+    {reason} — in the full pipeline this complaint would be routed to the
+    <b>Human Review Queue</b> for manual labelling.
+  </span>
+</div>
+""", unsafe_allow_html=True)
+
+                    st.markdown(f"""
+<div style="margin-top:1rem;padding:1.8rem;
+            background:var(--surface);border:1px solid var(--border);
+            border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,0.25)">
+  <div style="display:flex;justify-content:space-between;align-items:center;
+              margin-bottom:1.4rem;padding-bottom:1rem;border-bottom:1px solid var(--border)">
+    <span style="font-weight:700;font-size:0.95rem;letter-spacing:-0.01em;color:var(--text)">Classification Result</span>
+    {verdict_badge}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <div style="padding:14px 16px;background:{issue_bg};border:1px solid {issue_border};border-radius:10px">
+      <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Broad Issue · Level 1</div>
+      <div style="font-size:0.88rem;font-weight:600;color:var(--text)">{issue}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:4px">Expected: {true_issue}</div>
+    </div>
+    <div style="padding:14px 16px;background:{subissue_bg};border:1px solid {subissue_border};border-radius:10px">
+      <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Sub-Issue · Level 2</div>
+      <div style="font-size:0.88rem;font-weight:600;color:var(--text)">{subissue}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:4px">Expected: {true_subissue}</div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Joint Confidence</span>
+        <span style="font-size:12px;font-weight:700;color:{conf_color}">{conf_pct}%</span>
+      </div>
+      <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden">
+        <div class="bar-fill" style="height:100%;width:{conf_pct}%;border-radius:999px;background:{conf_color}"></div>
+      </div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Joint Perplexity ({perp:.2f})</span>
+        <span style="font-size:12px;font-weight:700;color:{clarity_color}">{clarity_pct}% clarity</span>
+      </div>
+      <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden">
+        <div class="bar-fill" style="height:100%;width:{clarity_pct}%;border-radius:999px;background:{clarity_color}"></div>
+      </div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+                    st.markdown("""
+<div style="margin-top:1rem;padding:1.2rem 1.6rem;
+            background:var(--surface);border:1px solid var(--border);border-radius:12px;
+            display:flex;justify-content:space-between;align-items:center;gap:1.2rem;flex-wrap:wrap">
+  <div style="font-size:0.85rem;color:var(--muted)">
+    Curious how it holds up on real, unseen complaints?
+  </div>
+</div>
+""", unsafe_allow_html=True)
+                    if st.button("Try the full app →", key="goto_app_cta"):
+                        st.session_state.nav_section = "App"
+                        st.rerun()
+
+                except Exception as e:
+                    st.error(f"Classification failed: {e}")
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 elif st.session_state.nav_section == "App":
     render_app_tabs()
