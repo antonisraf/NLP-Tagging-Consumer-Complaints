@@ -1127,7 +1127,7 @@ if st.session_state.nav_section == "About":
     Want to contribute?
   </h3>
   <p style="color:var(--muted);font-size:0.92rem;line-height:1.65;margin-bottom:1.3rem">
-    Bug fixes, new features, or improvements to the classifier itself — here's how to get started.
+    Bug fixes, new features, or improvements to the classifier itself, here's how to get started.
   </p>
 
   <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:1.4rem">
@@ -1217,7 +1217,7 @@ elif st.session_state.nav_section == "Demo":
         },
     }
 
-    # Only structural CSS here — no background colors, no new palette.
+    # Only structural CSS here, no background colors, no new palette.
     # Everything below reuses var(--surface) / var(--border) / var(--muted) / var(--text)
     # so this section matches the rest of the app instead of introducing its own theme.
     st.markdown("""
@@ -1313,7 +1313,7 @@ elif st.session_state.nav_section == "Demo":
         if run_demo:
             st.session_state.demo_ran_for = selected
 
-        # Persisted across reruns — unlike `run_demo`, this stays true even after
+        # Persisted across reruns, unlike `run_demo`, this stays true even after
         # a later rerun (e.g. clicking "Try the full app"), so buttons rendered
         # below inside this block still get instantiated and can receive clicks.
         show_result = st.session_state.get("demo_ran_for") == selected
