@@ -49,7 +49,7 @@ The main application entry point. Handles the full user-facing experience:
 1. Calls `load_real_complaints()` to sample `n` real complaints (with genuine CFPB-assigned labels) from `data/cfpb_2021-2022_holdout.csv`.
 2. Runs them through `HierarchicalComplaintClassifier.predict()`.
 3. Compares predictions against the real ground-truth labels.
-4. Forces `needs_review = True` for any row where the broad issue (Level 1) was predicted incorrectly (`apply_eval_review_override`), **and** additionally for any row where the sub-issue (Level 2) was predicted incorrectly — this second override is applied directly in `streamlit_app.py`, on top of the model's own confidence-based flagging.
+4. Forces `needs_review = True` for any row where the broad issue (Level 1) was predicted incorrectly (`apply_eval_review_override`), **and** additionally for any row where the sub-issue (Level 2) was predicted incorrectly. This second override is applied directly in `streamlit_app.py`, on top of the model's own confidence-based flagging.
 5. Stores the full results DataFrame in `st.session_state`.
 
 ---
@@ -94,7 +94,7 @@ Interpretation:
 
 Exposed in the Streamlit dashboard so reviewers can filter and prioritise the hardest cases, separately from the `needs_review` threshold flag.
 
-**Known limitation — blind spot on near-duplicate categories**
+**Known limitation, blind spot on near-duplicate categories**
 
 Validated on the real labelled test set, joint perplexity separates correct from incorrect predictions with an overall AUC-ROC of **0.648** (point-biserial r = 0.228). Breaking this down by error type shows the signal is not uniform:
 
@@ -130,7 +130,7 @@ Renders the **Human Review Queue** tab and manages the review lifecycle.
 - **Finalise Reviews** is only enabled once all flagged complaints have a decision. Clicking it calls `apply_review_decisions()`, which writes `reviewed_issue`, `reviewed_subissue`, and `review_source` (`"human"` or `"model"`) back to the DataFrame.
 
 **Accuracy treatment after finalisation:**
-- Human-reviewed rows are marked `issue_correct = True` and `subissue_correct = True` — the human takes ownership of those labels; they are not scored against the ground truth.
+- Human-reviewed rows are marked `issue_correct = True` and `subissue_correct = True`. The human takes ownership of those labels; they are not scored against the ground truth.
 - Model-only rows retain their original accuracy verdicts.
 
 After finalisation the Results tab reflects the updated labels and recomputes metrics accordingly.
@@ -142,11 +142,11 @@ Loads real, held-out CFPB student loan complaints from `data/cfpb_2021-2022_hold
 
 **`load_real_complaints(csv_path, n, random_state)`**
 
-- Expects the **raw CFPB export CSV** format (as downloaded from consumerfinance.gov), i.e. the original `Consumer complaint narrative`, `Issue`, `Sub-issue` columns — not a pre-processed file.
+- Expects the **raw CFPB export CSV** format (as downloaded from consumerfinance.gov), i.e. the original `Consumer complaint narrative`, `Issue`, `Sub-issue` columns, not a pre-processed file.
 - Drops rows with missing/empty narratives.
 - Maps `Issue` → `Issue_grouped` and `Sub-issue` → `Subissue_grouped` using the same mappings used at training time (`get_issue_mapping()`, `get_subissue_mapping()`); rows that fall outside the trained taxonomy are dropped.
 - Derives `true_issue_broad` via the same `GROUPING` dict used everywhere else in the pipeline (must stay in sync with `train_and_save_models.py`).
-- Raises `FileNotFoundError` / `ValueError` with an actionable message if the file is missing or malformed, rather than failing silently — `streamlit_app.py` surfaces these directly in the Activity Log.
+- Raises `FileNotFoundError` / `ValueError` with an actionable message if the file is missing or malformed, rather than failing silently, `streamlit_app.py` surfaces these directly in the Activity Log.
 
 Genuine consumer narratives with genuine CFPB-assigned ground-truth labels; no LLM bias/style artifacts, no API key, no generation cost.
 
@@ -183,7 +183,7 @@ python app/train_and_save_models.py
 | `tfidf_vectorizer.pkl` | `vectorizer.py` |
 | `X_train_tfidf.npz` | `vectorizer.py` |
 | `hierarchical_model_bundle.pkl` | `train_and_save_models.py` |
-| `cfpb_2021-2022_holdout.csv` | Raw CFPB export, filtered to Product = Student loan, years 2021-2022 (outside the training window) — download manually and place here |
+| `cfpb_2021-2022_holdout.csv` | Raw CFPB export, filtered to Product = Student loan, years 2021-2022 (outside the training window). Download manually and place here |
 
 ### First-time setup
 ```bash

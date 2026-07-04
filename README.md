@@ -14,7 +14,7 @@ ComplaintFlow is a machine-learning system that automatically classifies consume
 
 ## Stage 1: Exploratory Data Analysis
 
-The raw dataset contains approximately 52,988 records and 16 features, covering CFPB complaints submitted between 2023 and early 2026. After filtering for records with a non-null complaint narrative, 25,603 usable samples remain. The dataset spans 12 unique Issues and 52 unique Sub-issues arranged in a natural hierarchy, with a heavily skewed distribution — the most common Issue accounts for over 30,000 complaints. A Cramér's V correlation analysis confirmed that all metadata columns (company, state, submission channel) score below 0.25 in association with the target labels, establishing the free-text narrative as the only feature with predictive value. A length-based filter drops complaints below the 25th percentile character count as a quality gate before export.
+The raw dataset contains approximately 52,988 records and 16 features, covering CFPB complaints submitted between 2023 and early 2026. After filtering for records with a non-null complaint narrative, 25,603 usable samples remain. The dataset spans 12 unique Issues and 52 unique Sub-issues arranged in a natural hierarchy, with a heavily skewed distribution. The most common Issue accounts for over 30,000 complaints. A Cramér's V correlation analysis confirmed that all metadata columns (company, state, submission channel) score below 0.25 in association with the target labels, establishing the free-text narrative as the only feature with predictive value. A length-based filter drops complaints below the 25th percentile character count as a quality gate before export.
 
 > For the full analysis including label distributions, compliance trends, and column pruning decisions → [`EDA/Report_EDA.md`](EDA/Report_EDA.md)
 
@@ -34,11 +34,13 @@ The classifier operates in two cascaded levels. Level 1 predicts one of two broa
 
 > For model architecture, ensemble strategy, OOF cascading, threshold analysis, and evaluation dashboard → [`NLP_Model_testing/Report_NLP_Model_testing.md`](NLP_Model_testing/Report_NLP_Model_testing.md)
 
+> See known limitations and future work in the linked report.
+
 ---
 
 ## Stage 4: Application Layer
 
-The app is structured around three tabs: an Activity Log for sampling complaints and controlling the pipeline, a Results & Analysis dashboard with classification metrics and confusion matrices, and a Human Review Queue for correcting flagged predictions. Rather than generating complaints synthetically, the app samples real, held-out CFPB student loan complaints from 2021-2022 — genuine narratives with genuine CFPB-assigned labels, sitting outside the 2023–early 2026 training window. No external API or key is required at runtime. The inference pipeline (`model_pipeline.py`) applies the same `clean_tfidf_text` function used during training to avoid training-serving skew, then runs the full L1 → L2 cascade. Complaints are additionally forced into review if either the Level 1 or Level 2 prediction is incorrect, regardless of confidence. Once a reviewer finalises decisions, human-reviewed rows are treated as correct and the Results tab recomputes all metrics accordingly.
+The app is structured around three tabs: an Activity Log for sampling complaints and controlling the pipeline, a Results & Analysis dashboard with classification metrics and confusion matrices, and a Human Review Queue for correcting flagged predictions. Rather than generating complaints synthetically, the app samples real, held-out CFPB student loan complaints from 2021-2022, genuine narratives with genuine CFPB-assigned labels, sitting outside the 2023–early 2026 training window. No external API or key is required at runtime. The inference pipeline (`model_pipeline.py`) applies the same `clean_tfidf_text` function used during training to avoid training-serving skew, then runs the full L1 → L2 cascade. Complaints are additionally forced into review if either the Level 1 or Level 2 prediction is incorrect, regardless of confidence. Once a reviewer finalises decisions, human-reviewed rows are treated as correct and the Results tab recomputes all metrics accordingly.
 
 > For file structure, inference pipeline details, review lifecycle, and setup instructions → [`app/Report_app.md`](app/Report_app.md)
 
