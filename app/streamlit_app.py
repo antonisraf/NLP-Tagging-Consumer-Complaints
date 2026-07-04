@@ -1009,16 +1009,164 @@ def render_app_tabs():
 
 # ── NAV ROUTING ───────────────────────────────────────────────────────────────
 if st.session_state.nav_section == "About":
+    CONTRIBUTORS = [
+        {
+            "name": "antonisraf",
+            "bio": "Into tech and business. Just learning a bit of everything as long as it's cool",
+            "avatar": "https://avatars.githubusercontent.com/u/236162190?v=4",
+            "url": "https://github.com/antonisraf",
+        },
+        {
+            "name": "angelosdav",
+            "bio": "Data enthusiast curious about how systems work.",
+            "avatar": "https://avatars.githubusercontent.com/u/270142810?v=4",
+            "url": "https://github.com/angelosdav",
+        },
+        {
+            "name": "Dimitrispgt",
+            "bio": "",
+            "avatar": "https://avatars.githubusercontent.com/u/290385305?v=4",
+            "url": "https://github.com/Dimitrispgt",
+        },
+    ]
+
+    cards = ""
+    for c in CONTRIBUTORS:
+        bio_text = c["bio"] if c["bio"] else "No bio yet"
+        cards += f"""
+<a href="{c['url']}" target="_blank" class="contributor-card" style="text-decoration:none;display:block">
+  <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:12px;
+              padding:1.4rem;display:flex;align-items:center;gap:16px;min-height:96px;
+              transition:transform .2s ease, border-color .2s ease, box-shadow .2s ease">
+    <img src="{c['avatar']}" class="contributor-avatar"
+         style="width:60px;height:60px;min-width:60px;border-radius:50%;object-fit:cover;
+                border:2px solid var(--border);flex-shrink:0;
+                transition:border-color .2s ease, box-shadow .2s ease"/>
+    <div style="text-align:left">
+      <div style="font-weight:700;font-size:1.02rem;color:var(--text);
+                  display:flex;align-items:center;gap:6px">
+        {c['name']}
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="color:var(--muted)">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                   0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+                   -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+                   -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82
+                   .64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12
+                   .51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48
+                   0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+      </div>
+      <div style="font-size:0.9rem;color:var(--muted);line-height:1.55;margin-top:2px">{bio_text}</div>
+    </div>
+  </div>
+</a>
+"""
+
     st.markdown("""
-<div style="max-width:760px;margin:3.5rem auto;padding:2.5rem;background:var(--surface);
-            border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.2)">
-  <h2 style="margin-bottom:1rem;letter-spacing:-0.02em;">About ComplaintFlow</h2>
-  <p style="color:var(--muted);line-height:1.7;font-size:0.95rem">
+<style>
+.contributor-card:hover > div {
+  transform:translateX(3px);
+  border-color:rgba(129,140,248,0.4) !important;
+  box-shadow:0 4px 16px rgba(129,140,248,0.12);
+}
+.contributor-card:hover .contributor-avatar {
+  border-color:#818cf8 !important;
+  box-shadow:0 0 0 4px rgba(129,140,248,0.15);
+}
+@keyframes titleShimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+.contributors-title {
+  animation: titleShimmer 4s linear infinite;
+  background: linear-gradient(90deg,#f8fafc,#818cf8,#6366f1,#818cf8,#f8fafc) !important;
+  background-size: 300% 100% !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+    st.markdown('<div style="max-width:1180px;margin:2.5rem auto;padding:0 1rem">', unsafe_allow_html=True)
+
+    # ---- Top: About (full width) ----
+    st.markdown("""
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;
+            padding:2.2rem;box-shadow:0 4px 20px rgba(0,0,0,0.2);margin-bottom:20px">
+  <h2 style="margin-bottom:0.9rem;font-size:1.55rem;letter-spacing:-0.02em">About ComplaintFlow</h2>
+  <p style="color:var(--muted);line-height:1.7;font-size:0.98rem">
     ComplaintFlow is an Hierarchical NLP pipeline that classifies CFPB student loan complaints
     into structured Issue and Sub-issue labels, with confidence-based routing to a human review app.
   </p>
 </div>
 """, unsafe_allow_html=True)
+
+    # ---- Bottom row: Contributors (left) / Contribute (right) ----
+    left, right = st.columns([3, 2], gap="large")
+
+    with left:
+        st.markdown(f"""
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;
+            padding:2.2rem;box-shadow:0 4px 20px rgba(0,0,0,0.2)">
+  <h3 class="contributors-title" style="margin:0 0 1.4rem 0;font-size:1.4rem;font-weight:800;letter-spacing:-0.02em">
+    Contributors
+  </h3>
+  <div style="display:flex;flex-direction:column;gap:12px">
+    {cards}
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    with right:
+        st.markdown("""
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;
+            padding:2.2rem;box-shadow:0 4px 20px rgba(0,0,0,0.2)">
+  <h3 style="margin:0 0 0.6rem 0;font-size:1.15rem;font-weight:700;letter-spacing:-0.01em;color:var(--text)">
+    Want to contribute?
+  </h3>
+  <p style="color:var(--muted);font-size:0.92rem;line-height:1.65;margin-bottom:1.3rem">
+    Bug fixes, new features, or improvements to the classifier itself — here's how to get started.
+  </p>
+
+  <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:1.4rem">
+    <div style="display:flex;gap:12px">
+      <div style="width:24px;height:24px;border-radius:50%;background:rgba(129,140,248,0.12);
+                  border:1px solid rgba(129,140,248,0.3);display:flex;align-items:center;
+                  justify-content:center;font-size:12px;font-weight:700;color:#818cf8;flex-shrink:0">1</div>
+      <div style="font-size:0.92rem;color:var(--muted);line-height:1.55">
+        <b style="color:var(--text)">Fork the repo</b> and clone it locally
+      </div>
+    </div>
+    <div style="display:flex;gap:12px">
+      <div style="width:24px;height:24px;border-radius:50%;background:rgba(129,140,248,0.12);
+                  border:1px solid rgba(129,140,248,0.3);display:flex;align-items:center;
+                  justify-content:center;font-size:12px;font-weight:700;color:#818cf8;flex-shrink:0">2</div>
+      <div style="font-size:0.92rem;color:var(--muted);line-height:1.55">
+        <b style="color:var(--text)">Create a branch</b> and commit your work
+      </div>
+    </div>
+    <div style="display:flex;gap:12px">
+      <div style="width:24px;height:24px;border-radius:50%;background:rgba(129,140,248,0.12);
+                  border:1px solid rgba(129,140,248,0.3);display:flex;align-items:center;
+                  justify-content:center;font-size:12px;font-weight:700;color:#818cf8;flex-shrink:0">3</div>
+      <div style="font-size:0.92rem;color:var(--muted);line-height:1.55">
+        <b style="color:var(--text)">Open a pull request</b> describing your change
+      </div>
+    </div>
+  </div>
+
+  <a href="https://github.com/antonisraf/NLP-Tagging-Consumer-Complaints" target="_blank" style="text-decoration:none">
+    <div style="display:inline-flex;align-items:center;gap:8px;background:#818cf8;color:white;
+                font-weight:600;font-size:0.92rem;padding:0.65rem 1.4rem;border-radius:8px">
+      View the repo on GitHub
+    </div>
+  </a>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 elif st.session_state.nav_section == "Demo":
     import hashlib
 
