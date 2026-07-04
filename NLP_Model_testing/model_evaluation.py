@@ -249,7 +249,9 @@ print(df_cm_l2.to_string())
 # Joint Perplexity on real test data, and its correlation with error
 # ======================================================================
 # Mirrors the metric computed in app/model_pipeline.py's predict(), but here
-# on the real labelled test set instead of synthetic Streamlit complaints.
+# validated against this script's own labelled test split (student_loan_test.csv),
+# a different real dataset from the one the Streamlit app now samples
+# (the CFPB 2021-2022 held-out export).
 # This is NOT the same as final_subissue_confidence: confidence is the max
 # probability, perplexity is the entropy-derived spread of the whole
 # distribution. Two predictions can have identical top-1 confidence but very

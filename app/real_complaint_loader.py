@@ -1,10 +1,10 @@
 """
 Loads real, held-out CFPB student loan complaints (e.g. years 2021-2022,
-outside the 2023-early 2026 training window) to use as evaluation data instead of
-LLM-generated synthetic complaints.
+outside the 2023-early 2026 training window) to use as evaluation data in
+the Streamlit app.
 
-Replaces complaint_generator.py: no API key, no LLM bias/style artifacts,
-genuine consumer narratives with genuine CFPB-assigned ground-truth labels.
+Genuine consumer narratives with genuine CFPB-assigned ground-truth labels:
+no LLM bias/style artifacts, no API key, no generation cost.
 
 Expects the RAW CFPB export CSV (as downloaded from
 https://www.consumerfinance.gov/data-research/consumer-complaints/), i.e.
@@ -79,8 +79,7 @@ def _prepare_holdout_df(csv_path):
 def load_real_complaints(csv_path, n=10, random_state=None):
     """
     Samples `n` real, held-out complaints from `csv_path` (raw CFPB export
-    format) and returns them in the same shape previously returned by
-    generate_synthetic_complaints(): a list of dicts with keys
+    format) and returns them as a list of dicts with keys
     'complaint_text', 'true_issue', 'true_subissue'.
 
     Raises FileNotFoundError / ValueError with an actionable message if the
