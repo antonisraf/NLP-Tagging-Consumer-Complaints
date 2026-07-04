@@ -68,7 +68,7 @@ class HierarchicalComplaintClassifier:
             complaint_text, cleaned_text,
             predicted_issue_broad, issue_confidence,
             predicted_subissue, subissue_confidence,
-            joint_confidence, needs_review
+            joint_confidence, needs_review, joint_perplexity
         """
         cleaned = [clean_tfidf_text(t) for t in texts]
         X = self.tfidf.transform(cleaned)
@@ -84,6 +84,7 @@ class HierarchicalComplaintClassifier:
         n = X.shape[0]
         sub_preds = np.empty(n, dtype=object)
         sub_confidence = np.zeros(n, dtype=float)
+        l2_entropy = np.zeros(n, dtype=float)
 
         for broad_group in self.broad_classes:
             mask = y_pred_broad == broad_group
@@ -103,8 +104,15 @@ class HierarchicalComplaintClassifier:
 
             sub_preds[mask] = sub_classes[np.argmax(avg_sub_proba, axis=1)]
             sub_confidence[mask] = level1_confidence[mask] * np.max(avg_sub_proba, axis=1)
+            l2_entropy[mask] = -np.sum(avg_sub_proba * np.log(avg_sub_proba + 1e-10), axis=1)
 
         joint_confidence = sub_confidence
+
+        # --- Joint perplexity: exp(H(L1) + H(L2)) per complaint ---
+        # High = uncertain at both levels (hard complaint), Low = confident (easy).
+        # Computed in the same pass as L2 inference — no extra model calls.
+        l1_entropy = -np.sum(avg_proba_broad * np.log(avg_proba_broad + 1e-10), axis=1)
+        joint_perplexity = np.exp(l1_entropy + l2_entropy)
 
         return pd.DataFrame({
             "complaint_text": texts,
@@ -115,7 +123,9 @@ class HierarchicalComplaintClassifier:
             "subissue_confidence": sub_confidence,
             "joint_confidence": joint_confidence,
             "needs_review": joint_confidence < threshold,
+            "joint_perplexity": joint_perplexity,
         })
+
 
 def apply_eval_review_override(results: pd.DataFrame) -> pd.DataFrame:
     """
@@ -124,10 +134,10 @@ def apply_eval_review_override(results: pd.DataFrame) -> pd.DataFrame:
     In real production use there is no ground-truth label, so `needs_review`
     is decided purely by `joint_confidence < threshold` inside `predict()`.
 
-    In evaluation/demo contexts (e.g. the Streamlit app, which generates
-    synthetic complaints with a known `true_issue`), we additionally route a
-    complaint to human review whenever the predicted broad issue (Level 1) is
-    wrong, even if the model was confident. This catches high-confidence Level  1
+    In evaluation/demo contexts (e.g. the Streamlit app, which samples real
+    held-out complaints with a known `true_issue`), we additionally route a
+    complaint to human review whenever the predicted broad issue (L1) is
+    wrong, even if the model was confident. This catches high-confidence L1
     mistakes that the joint-confidence threshold alone would miss.
 
     Must be called AFTER `issue_correct` has been computed (i.e. after

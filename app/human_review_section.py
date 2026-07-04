@@ -48,7 +48,7 @@ def _progress_bar_html(done: int, total: int, dark_mode: bool) -> str:
     muted    = "#94a3b8" if dark_mode else "#64748b"
     text     = "#f1f5f9" if dark_mode else "#1e293b"
     return f"""
-<div style="margin-bottom:12px">
+<div style="margin-bottom:16px">
   <div style="display:flex;justify-content:space-between;
               font-size:11px;color:{muted};margin-bottom:5px">
     <span>Progress</span>
@@ -58,63 +58,6 @@ def _progress_bar_html(done: int, total: int, dark_mode: bool) -> str:
     <div style="width:{pct}%;height:100%;
                 background:{PRIMARY};
                 border-radius:3px;transition:width .3s ease"></div>
-  </div>
-</div>"""
-
-
-def _complaint_card_html(
-    idx: int,
-    complaint_text: str,
-    model_issue: str,
-    model_subissue: str,
-    model_confidence: float,
-    is_decided: bool,
-    dark_mode: bool,
-) -> str:
-    surface  = DARK_SURFACE if dark_mode else LIGHT_SURFACE
-    border   = "rgba(255,255,255,0.08)" if dark_mode else "rgba(0,0,0,0.08)"
-    muted    = "#94a3b8" if dark_mode else "#64748b"
-    text     = "#f1f5f9" if dark_mode else "#1e293b"
-    inner_bg = "rgba(255,255,255,0.03)" if dark_mode else "rgba(0,0,0,0.03)"
-    conf_pct = int(model_confidence * 100)
-
-    status_dot = (
-        f"<span style='color:{PRIMARY};font-size:12px'>✓ Decided</span>"
-        if is_decided
-        else f"<span style='color:{DANGER};font-size:12px'>⬤ Pending</span>"
-    )
-
-    return f"""
-<div style="background:{surface};border:1px solid {border};border-radius:8px;
-            padding:14px 16px;margin-bottom:8px">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-    <span style="font-size:11px;font-weight:700;color:{muted};
-                 text-transform:uppercase;letter-spacing:.06em">
-      Complaint #{idx + 1}
-    </span>
-    {status_dot}
-  </div>
-  <div style="font-size:12px;line-height:1.6;color:{text};
-              padding:10px 12px;background:{inner_bg};
-              border-radius:6px;margin-bottom:12px;
-              max-height:100px;overflow-y:auto">
-    {complaint_text}
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
-    <div style="font-size:10px;color:{muted}">
-      Model guess:
-      <span style="background:rgba(129,140,248,0.12);color:{PRIMARY};
-                   padding:2px 8px;border-radius:4px;font-weight:600;margin-left:4px">
-        {model_subissue}
-      </span>
-    </div>
-    <div style="font-size:10px;color:{muted}">
-      Confidence:
-      <span style="background:rgba(129,140,248,0.12);color:{PRIMARY};
-                   padding:2px 8px;border-radius:4px;font-weight:600;margin-left:4px">
-        {conf_pct}%
-      </span>
-    </div>
   </div>
 </div>"""
 
@@ -152,6 +95,15 @@ def apply_review_decisions(results_df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _row_label(row_idx: int, row: pd.Series, is_decided: bool, decisions: dict) -> str:
+    status_icon = "✓" if is_decided else "○"
+    if is_decided:
+        subissue = decisions[row_idx]["subissue"]
+        return f"{status_icon}   Complaint #{row_idx + 1}   ·   {subissue}   ·   reviewed"
+    conf_pct = int(row["joint_confidence"] * 100)
+    return f"{status_icon}   Complaint #{row_idx + 1}   ·   {row['predicted_subissue']}   ·   {conf_pct}% conf"
+
+
 def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
     _ensure_review_state()
 
@@ -164,7 +116,6 @@ def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
         st.markdown(f"""
 <div style="background:{surface};border:1px solid {border};border-radius:8px;
             padding:2rem;text-align:center;color:{muted}">
-  <div style="font-size:1.5rem;margin-bottom:8px"> </div>
   <div style="font-size:0.9rem">
     All complaints were auto-classified with confidence above the threshold.
     No human review needed.
@@ -179,13 +130,26 @@ def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
     decisions  = st.session_state.review_decisions
     total      = len(review_rows)
     done_count = sum(1 for idx in review_rows.index if idx in decisions)
+    all_done   = done_count == total
 
     st.markdown(
         _progress_bar_html(done_count, total, dark_mode),
         unsafe_allow_html=True,
     )
 
-    for row_idx, row in review_rows.iterrows():
+    show_reviewed = st.toggle("Show reviewed items", value=False, key="review_show_reviewed")
+
+    text  = "#f1f5f9" if dark_mode else "#1e293b"
+    inner_bg = "rgba(255,255,255,0.03)" if dark_mode else "rgba(0,0,0,0.03)"
+
+    rows_to_show = review_rows if show_reviewed else review_rows[
+        ~review_rows.index.isin(decisions.keys())
+    ]
+
+    if rows_to_show.empty:
+        st.caption("Nothing pending — toggle \u201cShow reviewed items\u201d to double-check your decisions.")
+
+    for row_idx, row in rows_to_show.iterrows():
         is_decided = row_idx in decisions
         current_issue = (
             decisions[row_idx]["issue"]
@@ -198,59 +162,55 @@ def render_review_queue(results_df: pd.DataFrame, dark_mode: bool):
             else row["predicted_subissue"]
         )
 
-        st.markdown(
-            _complaint_card_html(
-                idx=row_idx,
-                complaint_text=row["complaint_text"],
-                model_issue=row["predicted_issue_broad"],
-                model_subissue=row["predicted_subissue"],
-                model_confidence=row["joint_confidence"],
-                is_decided=is_decided,
-                dark_mode=dark_mode,
-            ),
-            unsafe_allow_html=True,
-        )
+        with st.expander(_row_label(row_idx, row, is_decided, decisions), expanded=False):
+            st.markdown(f"""
+<div style="font-size:12px;line-height:1.6;color:{text};
+            padding:10px 12px;background:{inner_bg};
+            border-radius:6px;margin-bottom:12px;
+            max-height:110px;overflow-y:auto">
+  {row['complaint_text']}
+</div>""", unsafe_allow_html=True)
 
-        col_issue, col_sub, col_btn = st.columns([2, 2, 1])
+            col_issue, col_sub, col_btn = st.columns([2, 2, 1])
 
-        with col_issue:
-            chosen_issue = st.selectbox(
-                "Broad issue",
-                options=ALL_ISSUES,
-                index=ALL_ISSUES.index(current_issue) if current_issue in ALL_ISSUES else 0,
-                key=f"review_issue_{row_idx}",
-                label_visibility="collapsed",
-            )
+            with col_issue:
+                st.caption("Broad issue")
+                chosen_issue = st.selectbox(
+                    "Broad issue",
+                    options=ALL_ISSUES,
+                    index=ALL_ISSUES.index(current_issue) if current_issue in ALL_ISSUES else 0,
+                    key=f"review_issue_{row_idx}",
+                    label_visibility="collapsed",
+                )
 
-        available_subissues = ISSUE_SUBISSUE_MAP[chosen_issue]
+            available_subissues = ISSUE_SUBISSUE_MAP[chosen_issue]
 
-        with col_sub:
-            sub_index = 0
-            if current_subissue in available_subissues:
-                sub_index = available_subissues.index(current_subissue)
-            
-            chosen_sub = st.selectbox(
-                "Sub-issue",
-                options=available_subissues,
-                index=sub_index,
-                key=f"review_sub_{row_idx}",
-                label_visibility="collapsed",
-            )
+            with col_sub:
+                st.caption("Sub-issue")
+                sub_index = 0
+                if current_subissue in available_subissues:
+                    sub_index = available_subissues.index(current_subissue)
 
-        with col_btn:
-            btn_label = "Update" if is_decided else "Submit"
-            if st.button(btn_label, key=f"review_submit_{row_idx}", use_container_width=True):
-                st.session_state.review_decisions[row_idx] = {
-                    "issue":    chosen_issue,
-                    "subissue": chosen_sub,
-                }
-                st.rerun()
+                chosen_sub = st.selectbox(
+                    "Sub-issue",
+                    options=available_subissues,
+                    index=sub_index,
+                    key=f"review_sub_{row_idx}",
+                    label_visibility="collapsed",
+                )
 
-        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+            with col_btn:
+                st.caption("​")
+                btn_label = "Update" if is_decided else "Submit"
+                if st.button(btn_label, key=f"review_submit_{row_idx}", use_container_width=True):
+                    st.session_state.review_decisions[row_idx] = {
+                        "issue":    chosen_issue,
+                        "subissue": chosen_sub,
+                    }
+                    st.rerun()
 
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
-    all_done = done_count == total
     if not all_done:
         remaining = total - done_count
         st.caption(f"{remaining} complaint(s) still pending review before you can finalise.")

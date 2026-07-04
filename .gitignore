@@ -22,3 +22,5 @@ data/hierarchical_model_bundle.pkl
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 */.ipynb_checkpoints/
+.venv_new/
+.vscode/

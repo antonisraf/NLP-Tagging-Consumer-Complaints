@@ -35,7 +35,17 @@ For each Level 1 group, a separate Level 2 model is trained on `hstack([TF-IDF f
 * **`hierarchical_baseline_experiment.py`**: The routing confidence is the Level 2 model's own maximum predicted probability (`avg_sub_proba.max(axis=1)`). A single fixed `REJECTION_THRESHOLD = 0.45` is used to split predictions into "auto-labelled" and "sent for review."
 * **`model_evaluation.py`**: The routing confidence is a joint score, `level1_confidence × max(P(Level 2))`. A prediction that is uncertain at Level 1 but confident at Level 2 or vice versa should not be trusted unconditionally; the joint product captures this: both stages must be confident for the overall prediction to be routed as automatic. Using only the Level 2 confidence (as in the baseline) can mask systematic Level 1 errors that compound silently downstream. This score is swept across thresholds from 0.30 to 0.85 in steps of 0.05 to map the full automation/review trade-off curve. The range was chosen to span from near-zero rejection (all complaints auto-labelled) to near-total rejection (only the most certain predictions pass), allowing the inflection point to be identified empirically. The chosen threshold of 0.45 was selected from this sweep as the point where the auto-labelled subset reaches a stable high Macro F1 without requiring an operationally unacceptable human review rate.
 
-### Diagnostics & Reporting
+### Joint Perplexity Validation (real test data)
+`model_evaluation.py` also computes `joint_perplexity = exp(H(L1) + H(L2))`, the same entropy-based uncertainty metric used at inference time in `app/model_pipeline.py`, but here validated against ground-truth labels on this script's own labelled test split (`student_loan_test.csv`) rather than the CFPB 2021-2022 held-out complaints the Streamlit app samples at runtime. This checks whether the metric actually correlates with prediction error before it's trusted as a review-routing signal.
+
+Two measures are reported: point-biserial correlation between `joint_perplexity` and a binary error indicator, and AUC-ROC of `joint_perplexity` as a predictor of error (preferred here since it doesn't assume a linear relationship).
+
+Results on the real test set:
+* Overall: AUC-ROC = 0.648, point-biserial r = 0.228. A real but moderate signal.
+* Broken down by error type, the signal is not uniform. `Loan Information & Servicing` and `Payment & Repayment Issues` are near-duplicate categories that share vocabulary and account for roughly two-thirds of all sub-issue errors. On this specific pair, AUC drops to 0.601, barely above chance, because the model tends to be confidently wrong rather than genuinely uncertain there (a sharp probability distribution pointed at the wrong class still produces low entropy). On all other errors, AUC is 0.751, a good signal.
+
+**Conclusion:** joint perplexity is a useful secondary diagnostic for atypical or multi-topic complaints, but it should not be relied on as the primary or sole signal for routing the dominant Info/Payment confusion to human review. No separate handling for this pair currently exists in the pipeline; it is routed through the same joint-confidence threshold as everything else.
+
 * **`hierarchical_baseline_experiment.py`**:
   * Confusion matrix and top confusion-pair table for the Level 1 (4-class) predictions.
   * A second, independent experiment that maps `Issue_grouped` to a 2-class alternative grouping (`GROUPING_ALTERNATIVE`) and trains a fresh Level 1 model (with its own `GridSearchCV`) on that target for comparison.
@@ -46,9 +56,6 @@ For each Level 1 group, a separate Level 2 model is trained on `hstack([TF-IDF f
     1. Threshold trade-off curve (Auto Subset Macro F1 vs. Human Review %), with the chosen threshold (0.45) marked.
     2. Histogram/KDE of the joint confidence score `P(L1) × P(L2)` across all test predictions, with the threshold marked.
     3. Donut chart showing the auto-labelled vs. human-review split at the chosen threshold.
-
-
-
 
 ---
 
@@ -67,6 +74,19 @@ data/tfidf_vectorizer.pkl
 
 ### Outputs
 * `hierarchical_baseline_experiment.py`: console output only (classification reports, confusion matrices, confidence distribution, summary table). No files are saved.
-* `model_evaluation.py`: console output (classification reports and confusion matrices at the chosen threshold) plus `plots/nlp_performance_dashboard.png`.
+* `model_evaluation.py`: console output (classification reports, confusion matrices, joint perplexity vs. error analysis) plus `plots/nlp_performance_dashboard.png` and `plots/joint_perplexity_vs_error.png`.
+
+---
+
+## 4. Limitations & Future Work
+
+- **Near-duplicate sub-issue confusion.** `Loan Information & Servicing` and `Payment & Repayment Issues` share enough vocabulary that the model treats them as close even when they aren't close enough to separate with feature engineering alone. Possible directions: a dedicated binary classifier for this specific pair, or contextual embeddings instead of TF-IDF for this decision only.
+
+- **Length filtering instead of windowing.** Rather than dropping very long complaints via the unique-token filter, try feeding the model a windowed version of the text and compare performance, especially on the Servicing/Payment pair:
+  - First sentence only 
+  - First half or second half
+  - First + last sentence
+
+- **TF-IDF has a ceiling on this pair.** Since the Servicing/Payment confusion is about meaning, not vocabulary, no amount of TF-IDF tuning will likely fix it.
 
 ---

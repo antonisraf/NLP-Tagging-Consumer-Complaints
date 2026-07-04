@@ -2,7 +2,7 @@
 
 > **AI-powered complaint classification, human-backed.**
 
-ComplaintFlow is a machine-learning system that automatically classifies consumer student loan complaints sourced from the Consumer Financial Protection Bureau (CFPB) into structured Issue and Sub-issue labels, eliminating the need for manual tagging. The system combines a hierarchical NLP classifier with a human review queue, exposed through a Streamlit dashboard that generates synthetic complaints, runs them through the pipeline, and surfaces low-confidence predictions for human correction.
+ComplaintFlow is a machine-learning system that automatically classifies consumer student loan complaints sourced from the Consumer Financial Protection Bureau (CFPB) into structured Issue and Sub-issue labels, eliminating the need for manual tagging. The system combines a hierarchical NLP classifier with a human review queue, exposed through a Streamlit dashboard that samples real, held-out CFPB complaints (2021-2022, outside the training window), runs them through the pipeline, and surfaces low-confidence or incorrect predictions for human correction.
 
 ---
 
@@ -14,7 +14,7 @@ ComplaintFlow is a machine-learning system that automatically classifies consume
 
 ## Stage 1: Exploratory Data Analysis
 
-The raw dataset contains approximately 52,988 records and 16 features, covering CFPB complaints submitted between 2023 and early 2026. After filtering for records with a non-null complaint narrative, 25,603 usable samples remain. The dataset spans 12 unique Issues and 52 unique Sub-issues arranged in a natural hierarchy, with a heavily skewed distribution the most common Issue accounts for over 30,000 complaints. A Cramér's V correlation analysis confirmed that all metadata columns (company, state, submission channel) score below 0.25 in association with the target labels, establishing the free-text narrative as the only feature with predictive value. A length-based filter drops complaints below the 25th percentile character count as a quality gate before export.
+The raw dataset contains approximately 52,988 records and 16 features, covering CFPB complaints submitted between 2023 and early 2026. After filtering for records with a non-null complaint narrative, 25,603 usable samples remain. The dataset spans 12 unique Issues and 52 unique Sub-issues arranged in a natural hierarchy, with a heavily skewed distribution. The most common Issue accounts for over 30,000 complaints. A Cramér's V correlation analysis confirmed that all metadata columns (company, state, submission channel) score below 0.25 in association with the target labels, establishing the free-text narrative as the only feature with predictive value. A length-based filter drops complaints below the 25th percentile character count as a quality gate before export.
 
 > For the full analysis including label distributions, compliance trends, and column pruning decisions → [`EDA/Report_EDA.md`](EDA/Report_EDA.md)
 
@@ -30,15 +30,17 @@ Raw narratives are passed through an aggressive cleaning pipeline: lowercasing, 
 
 ## Stage 3: Hierarchical Model Training & Evaluation
 
-The classifier operates in two cascaded levels. Level 1 predicts one of two broad groups (`Loan Servicing & Payments` or `Non-Servicing Issues`); Level 2 predicts one of four sub-issues within the predicted group. Each level uses a soft-vote ensemble of Logistic Regression and a calibrated LinearSVC. To avoid leakage into the Level 2 training, Level 1 probabilities for the training set are computed via 5-fold out-of-fold cross-validation before being appended as cascade features. A joint confidence score `P(L1) × P(L2)` is computed for every prediction; complaints scoring below 0.45 are flagged for human review. The threshold was selected by sweeping from 0.30 to 0.85 and identifying the operating point that balances auto-labelled Macro F1 against human review rate. An exploratory baseline script (`hierarchical_baseline_experiment.py`) runs grid search and tests alternative groupings; the operational script (`model_evaluation.py`) locks in the final design and produces an evaluation dashboard.
+The classifier operates in two cascaded levels. Level 1 predicts one of two broad groups (`Loan Servicing & Payments` or `Non-Servicing Issues`); Level 2 predicts one of four sub-issues within the predicted group. Each level uses a soft-vote ensemble of Logistic Regression and a calibrated LinearSVC. To avoid leakage into the Level 2 training, Level 1 probabilities for the training set are computed via 5-fold out-of-fold cross-validation before being appended as cascade features. A joint confidence score `P(L1) × P(L2)` is computed for every prediction; complaints scoring below 0.45 are flagged for human review. The threshold was selected by sweeping from 0.30 to 0.85 and identifying the operating point that balances auto-labelled Macro F1 against human review rate. `model_evaluation.py` additionally validates a joint-perplexity uncertainty score against real ground-truth labels, and finds it unreliable for the single largest source of error (the `Loan Information & Servicing` ↔ `Payment & Repayment Issues` confusion, ~two-thirds of all sub-issue errors), where the model tends to be confidently wrong rather than genuinely uncertain. An exploratory baseline script (`hierarchical_baseline_experiment.py`) runs grid search and tests alternative groupings; the operational script (`model_evaluation.py`) locks in the final design and produces an evaluation dashboard.
 
 > For model architecture, ensemble strategy, OOF cascading, threshold analysis, and evaluation dashboard → [`NLP_Model_testing/Report_NLP_Model_testing.md`](NLP_Model_testing/Report_NLP_Model_testing.md)
+
+> See known limitations and future work in the linked report.
 
 ---
 
 ## Stage 4: Application Layer
 
-The app is structured around three tabs: an Activity Log for complaint generation and pipeline control, a Results & Analysis dashboard with classification metrics and confusion matrices, and a Human Review Queue for correcting flagged predictions. Synthetic complaints are generated via Groq's `llama-3.3-70b-versatile` model in batches of 10, with few-shot examples drawn from real anonymised narratives as style references. The inference pipeline (`model_pipeline.py`) applies the same `clean_tfidf_text` function used during training to avoid training-serving skew, then runs the full L1 → L2 cascade. Complaints are additionally forced into review if the Level 1 prediction is incorrect, regardless of confidence. Once a reviewer finalises decisions, human-reviewed rows are treated as correct and the Results tab recomputes all metrics accordingly. A session rate limit of 5 runs per hour manages Groq API usage.
+The app is structured around three tabs: an Activity Log for sampling complaints and controlling the pipeline, a Results & Analysis dashboard with classification metrics and confusion matrices, and a Human Review Queue for correcting flagged predictions. Rather than generating complaints synthetically, the app samples real, held-out CFPB student loan complaints from 2021-2022, genuine narratives with genuine CFPB-assigned labels, sitting outside the 2023–early 2026 training window. No external API or key is required at runtime. The inference pipeline (`model_pipeline.py`) applies the same `clean_tfidf_text` function used during training to avoid training-serving skew, then runs the full L1 → L2 cascade. Complaints are additionally forced into review if either the Level 1 or Level 2 prediction is incorrect, regardless of confidence. Once a reviewer finalises decisions, human-reviewed rows are treated as correct and the Results tab recomputes all metrics accordingly.
 
 > For file structure, inference pipeline details, review lifecycle, and setup instructions → [`app/Report_app.md`](app/Report_app.md)
 
@@ -53,7 +55,6 @@ The app is structured around three tabs: an Activity Log for complaint generatio
 ![NumPy](https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white)
 ![matplotlib](https://img.shields.io/badge/matplotlib-11557C?style=for-the-badge&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
-![Groq API](https://img.shields.io/badge/Groq%20API-2D2D2D?style=for-the-badge&logoColor=white)
 ![Jupyter](https://img.shields.io/badge/Jupyter-F37626?style=for-the-badge&logo=jupyter&logoColor=white)
 ![Excalidraw](https://img.shields.io/badge/Excalidraw-6965DB?style=for-the-badge&logoColor=white)
 ![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
@@ -86,13 +87,9 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Configure environment variables
+### 2. Get the held-out evaluation data
 
-```bash
-cp .env.example .env
-```
-
-Open `.env` and set `GROQ_API_KEY=gsk_...`. The key can also be entered directly in the app on first launch  it is session-scoped and never written to disk.
+Download the raw CFPB complaints export (Product = Student loan, filtered to 2021-2022) from [consumerfinance.gov](https://www.consumerfinance.gov/data-research/consumer-complaints/) and place it at `data/cfpb_2021-2022_holdout.csv`. No API key or `.env` file is needed.
 
 ### 3. Build artifacts & launch
 

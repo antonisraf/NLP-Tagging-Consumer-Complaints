@@ -90,6 +90,7 @@ train_broad_proba = (oof_lr + oof_svc) / 2.0
 train_df['broad_group'] = y_train_issue_broad.values
 final_subissue_preds      = np.empty(len(test_df), dtype=object)
 final_subissue_confidence = np.zeros(len(test_df), dtype=float)
+l2_entropy                = np.zeros(len(test_df), dtype=float)
 
 # We will train separate sub-issue classifiers for each broad issue category and apply them to the corresponding subsets of the test data
 for broad_group in broad_classes:
@@ -120,6 +121,7 @@ for broad_group in broad_classes:
         
         final_subissue_preds[test_mask] = sub_classes[np.argmax(avg_sub_proba, axis=1)]
         final_subissue_confidence[test_mask] = level1_confidence[test_mask] * np.max(avg_sub_proba, axis=1)
+        l2_entropy[test_mask] = -np.sum(avg_sub_proba * np.log(avg_sub_proba + 1e-10), axis=1)
 
 # Automated evaluation across a range of thresholds to analyze the trade-off between automation and human review
 thresholds = np.arange(0.30, 0.86, 0.05)
@@ -242,3 +244,128 @@ sub_classes_unique = sorted(y_test_subissue.unique())
 cm_l2 = confusion_matrix(y_test_subissue[auto_mask_chosen], final_subissue_preds[auto_mask_chosen], labels=sub_classes_unique)
 df_cm_l2 = pd.DataFrame(cm_l2, index=sub_classes_unique, columns=sub_classes_unique)
 print(df_cm_l2.to_string())
+
+# ======================================================================
+# Joint Perplexity on real test data, and its correlation with error
+# ======================================================================
+# Mirrors the metric computed in app/model_pipeline.py's predict(), but here
+# validated against this script's own labelled test split (student_loan_test.csv),
+# a different real dataset from the one the Streamlit app now samples
+# (the CFPB 2021-2022 held-out export).
+# This is NOT the same as final_subissue_confidence: confidence is the max
+# probability, perplexity is the entropy-derived spread of the whole
+# distribution. Two predictions can have identical top-1 confidence but very
+# different perplexity if the remaining mass is concentrated in one runner-up
+# vs. spread across many classes.
+from scipy import stats
+from sklearn.metrics import roc_auc_score
+
+l1_entropy = -np.sum(avg_proba_broad * np.log(avg_proba_broad + 1e-10), axis=1)
+joint_perplexity = np.exp(l1_entropy + l2_entropy)
+
+# Error at the sub-issue level (final prediction, before any threshold routing)
+is_error = (final_subissue_preds != y_test_subissue.values).astype(int)
+
+print("\n" + "=" * 60)
+print("Joint Perplexity vs. Prediction Error (real test data)")
+print("=" * 60)
+
+print(f"\nJoint Perplexity — mean: {joint_perplexity.mean():.3f}, "
+      f"median: {np.median(joint_perplexity):.3f}, "
+      f"std: {joint_perplexity.std():.3f}")
+print(f"Overall sub-issue error rate: {is_error.mean():.3%}")
+
+mean_pp_correct = joint_perplexity[is_error == 0].mean()
+mean_pp_wrong   = joint_perplexity[is_error == 1].mean()
+print(f"\nMean perplexity | correct predictions: {mean_pp_correct:.3f}")
+print(f"Mean perplexity | wrong predictions:    {mean_pp_wrong:.3f}")
+
+# Point-biserial correlation: continuous perplexity vs. binary error.
+# Captures linear association and its direction.
+pb_corr, pb_pvalue = stats.pointbiserialr(is_error, joint_perplexity)
+print(f"\nPoint-biserial correlation (perplexity, error): r = {pb_corr:.3f}  (p = {pb_pvalue:.4g})")
+
+# AUC-ROC: how well perplexity alone ranks/separates correct vs. wrong
+# predictions. More appropriate than r here since we only care about
+# "higher perplexity -> more likely wrong", not a linear relationship.
+# 0.5 = no better than random, 1.0 = perfect separation.
+auc = roc_auc_score(is_error, joint_perplexity)
+print(f"AUC-ROC (perplexity predicting error):        {auc:.3f}")
+
+if pb_corr > 0 and auc >= 0.70:
+    strength = "strong and in the expected direction"
+elif pb_corr > 0 and auc >= 0.60:
+    strength = "moderate and in the expected direction"
+elif pb_corr > 0:
+    strength = "weak but in the expected direction"
+else:
+    strength = "absent or inverted — investigate before trusting this metric for routing"
+print(f"\nInterpretation: relationship is {strength}.")
+
+# Perplexity distribution plot: correct vs. wrong, saved alongside the main dashboard
+fig2, ax = plt.subplots(figsize=(7, 5))
+sns.histplot(joint_perplexity[is_error == 0], bins=25, color=PRIMARY_COLOR, alpha=0.5,
+             label='Correct', kde=True, ax=ax, stat='density')
+sns.histplot(joint_perplexity[is_error == 1], bins=25, color=SECONDARY_COLOR, alpha=0.5,
+             label='Wrong', kde=True, ax=ax, stat='density')
+ax.set_title(f'Joint Perplexity by Outcome (r={pb_corr:.2f}, AUC={auc:.2f})',
+             fontsize=13, weight='bold', color='#333333')
+ax.set_xlabel('Joint Perplexity  =  exp(H(L1) + H(L2))', labelpad=10)
+ax.set_ylabel('Density', labelpad=10)
+ax.legend(frameon=True, facecolor='white', edgecolor='none')
+ax.grid(True, linestyle='--', alpha=0.5)
+plt.tight_layout()
+plt.savefig('plots/joint_perplexity_vs_error.png', dpi=300, bbox_inches='tight')
+plt.close()
+print("\nSaved: plots/joint_perplexity_vs_error.png")
+
+# ----------------------------------------------------------------------
+# Does perplexity actually catch the DOMINANT confusion pair, or just
+# catch easier/rarer errors while missing the main one?
+# ----------------------------------------------------------------------
+# The two sub-issues below share vocabulary and get confused with each
+# other far more than with anything else (see confusion matrix above).
+# Aggregate AUC/r can look "fine" while being blind to exactly this pair,
+# if the model is confidently wrong there (sharp distribution, wrong peak)
+# rather than genuinely uncertain (flat distribution).
+CONFUSABLE_PAIR = {'Loan Information & Servicing', 'Payment & Repayment Issues'}
+
+is_confusable_pair_error = (
+    (is_error == 1)
+    & y_test_subissue.isin(CONFUSABLE_PAIR).values
+    & pd.Series(final_subissue_preds).isin(CONFUSABLE_PAIR).values
+)
+is_other_error = (is_error == 1) & (~is_confusable_pair_error)
+is_correct = is_error == 0
+
+print("\n" + "=" * 60)
+print("Perplexity broken down by error type")
+print("=" * 60)
+print(f"\nCorrect predictions:              n={is_correct.sum():5d}  mean perplexity={joint_perplexity[is_correct].mean():.3f}")
+print(f"Confusable-pair errors (Info<->Payment): n={is_confusable_pair_error.sum():5d}  mean perplexity={joint_perplexity[is_confusable_pair_error].mean():.3f}")
+print(f"Other errors:                      n={is_other_error.sum():5d}  mean perplexity={joint_perplexity[is_other_error].mean():.3f}")
+
+# AUC of perplexity separating correct vs. confusable-pair errors specifically
+mask_pair_vs_correct = is_correct | is_confusable_pair_error
+if is_confusable_pair_error.sum() > 0:
+    auc_pair = roc_auc_score(
+        is_confusable_pair_error[mask_pair_vs_correct].astype(int),
+        joint_perplexity[mask_pair_vs_correct]
+    )
+    print(f"\nAUC (perplexity separating confusable-pair errors from correct): {auc_pair:.3f}")
+
+# AUC of perplexity separating correct vs. all other (non-pair) errors
+mask_other_vs_correct = is_correct | is_other_error
+if is_other_error.sum() > 0:
+    auc_other = roc_auc_score(
+        is_other_error[mask_other_vs_correct].astype(int),
+        joint_perplexity[mask_other_vs_correct]
+    )
+    print(f"AUC (perplexity separating other errors from correct):           {auc_other:.3f}")
+
+print(
+    "\nIf AUC(confusable-pair) << AUC(other), the metric is mostly catching\n"
+    "the easier/rarer errors and is blind to the main failure mode driving\n"
+    "review volume, which means it should NOT be trusted alone to route\n"
+    "these specific complaints away from human review."
+)
